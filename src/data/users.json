@@ -25,5 +25,23 @@
     "role": "user",
     "createdAt": "2026-05-27T17:03:58.461Z",
     "refreshToken": "$2a$12$/1g7hhf2tmmDnMVnVVaAW.LUpbTH9NpmihgQS/5WwuGcz7IwZnQLa"
+  },
+  {
+    "id": "f601e82d-96db-456c-909a-9ff7b99e8003",
+    "name": "Charlie man",
+    "email": "charlieman@ozmo.io",
+    "password": "$2a$12$4Lrdcec0kQB6hJeD4VSbVesEsJc7cR9ShVfzhxq1fBvHDhZpGgGO2",
+    "role": "user",
+    "createdAt": "2026-05-28T15:06:51.358Z",
+    "refreshToken": "$2a$12$RutxlpPhEJEvmj6ZSCmO4eyNTY3E6muk8wbcP/3SmaXTEJVm8suBW"
+  },
+  {
+    "id": "4334ba40-efc8-424a-887a-d392fd3ed5eb",
+    "name": "roshini",
+    "email": "roshini@ozmo.io",
+    "password": "$2a$12$p.Hh/LBr6c6ixXS5j2wx.OqDe8w3a.PfFZziHKhYF5o2HeR/i69VC",
+    "role": "user",
+    "createdAt": "2026-05-29T11:04:24.906Z",
+    "refreshToken": "$2a$12$iwfyQasZdl9x/.oQ5ykGj.4QAz9pNCNpq9YSp8hpv2b.gUCOFrZ32"
   }
 ]
