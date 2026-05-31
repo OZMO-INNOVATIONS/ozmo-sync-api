@@ -1,87 +1,136 @@
-# 🔐 Ozmo Sync API
+# OZMO SYNC API
 
-Production-style Node.js authentication REST API built with Express.js, JWT, and Clean Architecture — **no database required**.
-
----
-
-## 📋 Table of Contents
-
-- [Tech Stack](#-tech-stack)
-- [Project Structure](#-project-structure)
-- [Setup & Installation](#-setup--installation)
-- [Environment Variables](#-environment-variables)
-- [API Documentation](#-api-documentation)
-  - [Health Check](#1-health-check)
-  - [Register](#2-register)
-  - [Login](#3-login)
-  - [Get Profile](#4-get-profile)
-  - [Refresh Token](#5-refresh-token)
-  - [Logout](#6-logout)
-- [Error Responses](#-error-responses)
-- [Seed Users](#-seed-users)
+Enterprise-grade Staff Management & Attendance Tracking REST API built with **NestJS + TypeScript**.
 
 ---
 
-## 🛠 Tech Stack
+## Table of Contents
 
-| Technology         | Purpose                      |
-| ------------------ | ---------------------------- |
-| Node.js            | Runtime                      |
-| Express.js         | Web framework                |
-| JWT (jsonwebtoken) | Access & refresh tokens      |
-| bcryptjs           | Password hashing             |
-| express-validator  | Request validation           |
-| helmet             | Security headers             |
-| cors               | Cross-origin resource sharing|
-| morgan             | HTTP request logging         |
-| express-rate-limit | Brute-force protection       |
-| dotenv             | Environment variable loading |
-| uuid               | Unique ID generation         |
-| nodemon            | Development auto-reload      |
+- [Tech Stack](#tech-stack)
+- [Project Structure](#project-structure)
+- [Setup & Installation](#setup--installation)
+- [Environment Variables](#environment-variables)
+- [Roles & Permissions](#roles--permissions)
+- [API Documentation](#api-documentation)
+  - [Response Envelope](#response-envelope)
+  - [Endpoint Overview](#endpoint-overview)
+  - [Authentication](#authentication)
+    - [Register](#register)
+    - [Login](#login)
+    - [Refresh Token](#refresh-token)
+    - [Logout](#logout)
+  - [Profile](#profile)
+    - [Get Own Profile](#get-own-profile)
+    - [Update Own Profile](#update-own-profile)
+    - [List All Users](#list-all-users)
+    - [Get User by ID](#get-user-by-id)
+    - [Delete User](#delete-user)
+  - [Attendance](#attendance)
+    - [Check In](#check-in)
+    - [Check Out](#check-out)
+    - [Get My Attendance](#get-my-attendance)
+    - [Get Attendance Dashboard](#get-attendance-dashboard)
+    - [Get Attendance for a User](#get-attendance-for-a-user)
+  - [Staff Management](#staff-management)
+    - [Create Staff Member](#create-staff-member)
+    - [List All Staff](#list-all-staff)
+    - [Search Staff](#search-staff)
+    - [Filter Staff](#filter-staff)
+    - [Get Staff by ID](#get-staff-by-id)
+    - [Update Staff](#update-staff)
+    - [Delete Staff](#delete-staff)
+- [Error Responses](#error-responses)
+- [HTTP Status Codes](#http-status-codes)
 
 ---
 
-## 📁 Project Structure
+## Tech Stack
+
+| Technology        | Purpose                            |
+| ----------------- | ---------------------------------- |
+| NestJS 10         | Web framework                      |
+| TypeScript 5      | Type safety                        |
+| @nestjs/passport  | JWT authentication strategy        |
+| @nestjs/jwt       | JWT signing & verification         |
+| passport-jwt      | Passport JWT strategy              |
+| class-validator   | DTO validation                     |
+| class-transformer | Request body transformation        |
+| bcryptjs          | Password & refresh token hashing   |
+| uuid              | Unique ID generation               |
+| @nestjs/config    | Environment variable management    |
+| jsonwebtoken      | Refresh token signing              |
+
+---
+
+## Project Structure
 
 ```
 src/
- ├── config/
- │    └── env.js                   # Centralized dotenv configuration
- │
- ├── controllers/
- │    ├── authController.js        # Thin HTTP layer for auth
- │    └── userController.js        # Thin HTTP layer for users
- │
- ├── middleware/
- │    ├── authMiddleware.js        # JWT Bearer auth & RBAC guard
- │    ├── errorMiddleware.js       # Centralized 404 & global error handler
- │    └── validationMiddleware.js  # express-validator rule-sets
- │
- ├── routes/
- │    ├── authRoutes.js            # Public + protected auth routes
- │    └── userRoutes.js            # Protected user routes
- │
- ├── services/
- │    └── authService.js           # Core business logic layer
- │
- ├── repositories/
- │    └── userRepository.js        # Data persistence layer (JSON file)
- │
- ├── utils/
- │    ├── jwt.js                   # JWT sign & verify helpers
- │    ├── password.js              # bcrypt hash & compare helpers
- │    └── response.js              # Standardized API response envelope
- │
- ├── data/
- │    └── users.json               # JSON file storage (replaces DB)
- │
- ├── app.js                        # Express app factory
- └── server.js                     # HTTP server & graceful shutdown
+├── main.ts                              # Bootstrap — global prefix, versioning, pipes, filters
+├── app.module.ts
+│
+├── common/
+│   ├── constants/roles.enum.ts          # Role enum, UserStatus enum
+│   ├── decorators/
+│   │   ├── roles.decorator.ts           # @Roles(...roles) via SetMetadata
+│   │   └── current-user.decorator.ts    # @CurrentUser() param decorator
+│   ├── guards/
+│   │   ├── jwt-auth.guard.ts            # Thin AuthGuard('jwt') wrapper
+│   │   └── roles.guard.ts              # Reflector-based RBAC
+│   ├── interceptors/
+│   │   └── response.interceptor.ts     # Wraps success → { success, message, data, timestamp }
+│   ├── filters/
+│   │   └── http-exception.filter.ts    # Wraps errors → { success: false, message, timestamp }
+│   └── interfaces/
+│       ├── jwt-payload.interface.ts
+│       ├── request-user.interface.ts
+│       └── api-response.interface.ts
+│
+├── repositories/                        # Phase 1: injectable in-memory Map stores
+│   ├── user.repository.ts
+│   ├── attendance.repository.ts
+│   └── staff-profile.repository.ts
+│
+├── auth/                                # register, login, refresh, logout
+│   ├── auth.module.ts
+│   ├── auth.controller.ts
+│   ├── auth.service.ts
+│   ├── strategies/jwt.strategy.ts
+│   └── dto/
+│       ├── register.dto.ts
+│       ├── login.dto.ts
+│       └── refresh-token.dto.ts
+│
+├── profile/                             # Own profile + admin user management
+│   ├── profile.module.ts
+│   ├── profile.controller.ts
+│   ├── profile.service.ts
+│   └── dto/update-profile.dto.ts
+│
+├── attendance/                          # Check-in/out, history, dashboard
+│   ├── attendance.module.ts
+│   ├── attendance.controller.ts
+│   ├── attendance.service.ts
+│   └── dto/
+│       ├── check-in.dto.ts
+│       └── attendance-query.dto.ts
+│
+└── staff/                               # HR staff CRUD, search, filter
+    ├── staff.module.ts
+    ├── staff.controller.ts
+    ├── staff.service.ts
+    └── dto/
+        ├── create-staff.dto.ts
+        ├── update-staff.dto.ts
+        └── staff-filter.dto.ts
+
+prisma/
+└── schema.prisma                        # Phase 3: PostgreSQL schema (ready, not yet wired)
 ```
 
 ---
 
-## 🚀 Setup & Installation
+## Setup & Installation
 
 ```bash
 # 1. Clone the repository
@@ -94,128 +143,148 @@ npm install
 # 3. Create environment file
 cp .env.example .env
 
-# 4. (Optional) Generate strong JWT secrets
+# 4. Generate strong JWT secrets
 node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"
-# Paste the output into JWT_SECRET and JWT_REFRESH_SECRET in .env
+# Run twice — paste one value into JWT_SECRET, the other into JWT_REFRESH_SECRET
 
-# 5. Start development server (with auto-reload)
-npm run dev
+# 5. Start development server (auto-reload)
+npm run start:dev
 
-# 6. Start production server
+# 6. Build for production
+npm run build
+
+# 7. Start production server
 npm start
 ```
 
-The server will start at `http://localhost:4000`
+Server starts at `http://localhost:4000/api/v1`
 
 ---
 
-## ⚙️ Environment Variables
+## Environment Variables
 
-| Variable               | Default          | Description                         |
-| ---------------------- | ---------------- | ----------------------------------- |
-| `NODE_ENV`             | `development`    | App environment                     |
-| `PORT`                 | `4000`           | Server port                         |
-| `APP_NAME`             | `ozmo-auth-api`  | Application name                    |
-| `JWT_SECRET`           | **(required)**   | Secret key for access tokens        |
-| `JWT_EXPIRES_IN`       | `15m`            | Access token expiry duration        |
-| `JWT_REFRESH_SECRET`   | **(required)**   | Secret key for refresh tokens       |
-| `JWT_REFRESH_EXPIRES`  | `7d`             | Refresh token expiry duration       |
-| `BCRYPT_SALT_ROUNDS`   | `12`             | bcrypt hashing rounds               |
-| `ALLOWED_ORIGINS`      | `localhost:3000`  | Comma-separated CORS origins       |
-| `RATE_LIMIT_WINDOW_MS` | `900000`         | Rate limit window (15 min)          |
-| `RATE_LIMIT_MAX`       | `100`            | Max requests per window             |
+| Variable              | Default                 | Description                       |
+| --------------------- | ----------------------- | --------------------------------- |
+| `NODE_ENV`            | `development`           | App environment                   |
+| `PORT`                | `4000`                  | Server port                       |
+| `JWT_SECRET`          | **(required)**          | Secret key for access tokens      |
+| `JWT_EXPIRES_IN`      | `15m`                   | Access token TTL                  |
+| `JWT_REFRESH_SECRET`  | **(required)**          | Secret key for refresh tokens     |
+| `JWT_REFRESH_EXPIRES` | `7d`                    | Refresh token TTL                 |
+| `BCRYPT_SALT_ROUNDS`  | `12`                    | bcrypt hashing cost factor        |
+| `ALLOWED_ORIGINS`     | `http://localhost:3000` | Comma-separated CORS origins      |
+| `DATABASE_URL`        | —                       | PostgreSQL connection (Phase 3)   |
 
 ---
 
-## 📖 API Documentation
+## Roles & Permissions
 
-**Base URL:** `http://localhost:4000`
-**API Prefix:** `/api/v1`
+| Role          | Description                               |
+| ------------- | ----------------------------------------- |
+| `SUPER_ADMIN` | Full system access                        |
+| `ADMIN`       | User & staff management, full attendance  |
+| `HR`          | Staff CRUD, attendance reporting          |
+| `MANAGER`     | View staff lists and attendance           |
+| `TEAM_LEAD`   | Attendance check-in/out, view own team    |
+| `STAFF`       | Own attendance only                       |
+| `GUEST`       | Read-only (reserved)                      |
+
+RBAC is enforced via `@Roles()` decorator + `RolesGuard` at the controller level. Public routes (register, login, refresh) require no token.
+
+---
+
+## API Documentation
+
+**Base URL:** `http://localhost:4000/api/v1`
+
+---
 
 ### Response Envelope
 
-All responses follow a consistent structure:
+All responses share the same structure.
 
-```json
-{
-  "success": true | false,
-  "message": "Human-readable message",
-  "data": { ... },
-  "timestamp": "2026-05-27T17:03:40.069Z"
-}
-```
-
----
-
-### 1. Health Check
-
-Check if the server is running.
-
-**Endpoint:** `GET /health`
-**Auth:** None
-
-#### cURL
-
-```bash
-curl -X GET http://localhost:4000/health
-```
-
-#### Response — `200 OK`
-
+**Success**
 ```json
 {
   "success": true,
-  "message": "Service is healthy",
-  "app": "ozmo-auth-api",
-  "env": "development",
-  "timestamp": "2026-05-27T17:04:09.338Z"
+  "message": "Human-readable message",
+  "data": {},
+  "timestamp": "2026-05-31T10:00:00.000Z"
+}
+```
+
+**Error**
+```json
+{
+  "success": false,
+  "message": "Human-readable error",
+  "timestamp": "2026-05-31T10:00:00.000Z"
 }
 ```
 
 ---
 
-### 2. Register
+### Endpoint Overview
 
-Create a new user account and receive tokens.
+| Method   | Endpoint                        | Auth        | Roles                              |
+| -------- | ------------------------------- | ----------- | ---------------------------------- |
+| `POST`   | `/auth/register`                | None        | —                                  |
+| `POST`   | `/auth/login`                   | None        | —                                  |
+| `POST`   | `/auth/refresh`                 | None        | —                                  |
+| `POST`   | `/auth/logout`                  | JWT         | Any                                |
+| `GET`    | `/profile`                      | JWT         | Any                                |
+| `PUT`    | `/profile`                      | JWT         | Any                                |
+| `GET`    | `/users`                        | JWT + Roles | `ADMIN` `HR` `MANAGER`             |
+| `GET`    | `/users/:id`                    | JWT + Roles | `ADMIN` `HR` `MANAGER`             |
+| `DELETE` | `/users/:id`                    | JWT + Roles | `ADMIN`                            |
+| `POST`   | `/attendance/check-in`          | JWT + Roles | `STAFF` `TEAM_LEAD`                |
+| `POST`   | `/attendance/check-out`         | JWT + Roles | `STAFF` `TEAM_LEAD`                |
+| `GET`    | `/attendance/my`                | JWT         | Any                                |
+| `GET`    | `/attendance/dashboard`         | JWT + Roles | `ADMIN` `HR` `MANAGER`             |
+| `GET`    | `/attendance/:userId`           | JWT + Roles | `ADMIN` `HR` `MANAGER`             |
+| `POST`   | `/staff`                        | JWT + Roles | `ADMIN` `HR`                       |
+| `GET`    | `/staff`                        | JWT + Roles | `ADMIN` `HR` `MANAGER`             |
+| `GET`    | `/staff/search?q=`              | JWT + Roles | `ADMIN` `HR` `MANAGER`             |
+| `GET`    | `/staff/filter`                 | JWT + Roles | `ADMIN` `HR` `MANAGER`             |
+| `GET`    | `/staff/:id`                    | JWT + Roles | `ADMIN` `HR` `MANAGER` `TEAM_LEAD` |
+| `PUT`    | `/staff/:id`                    | JWT + Roles | `ADMIN` `HR`                       |
+| `DELETE` | `/staff/:id`                    | JWT + Roles | `ADMIN`                            |
 
-**Endpoint:** `POST /api/v1/auth/register`
-**Auth:** None
+---
 
-#### Request Headers
+### Authentication
 
-```
-Content-Type: application/json
-```
+#### Register
 
-#### Request Body
+Create a new account and receive a token pair. `employeeId` is auto-generated in the format `OZ-{year}-{count}`.
 
-| Field      | Type   | Required | Validation                                         |
-| ---------- | ------ | -------- | -------------------------------------------------- |
-| `name`     | string | ✅       | 2–100 characters                                   |
-| `email`    | string | ✅       | Valid email format                                  |
-| `password` | string | ✅       | Min 8 chars, 1 uppercase letter, 1 number           |
+**`POST /api/v1/auth/register`** — Auth: None
+
+##### Request Body
+
+| Field         | Type   | Required | Validation                                    |
+| ------------- | ------ | :------: | --------------------------------------------- |
+| `firstName`   | string | Yes      | 2–50 characters                               |
+| `lastName`    | string | Yes      | 2–50 characters                               |
+| `email`       | string | Yes      | Valid email, normalized to lowercase          |
+| `password`    | string | Yes      | Min 8 chars, at least 1 uppercase, 1 digit    |
+| `phone`       | string | No       |                                               |
+| `role`        | enum   | No       | Role enum value (default: `STAFF`)            |
+| `designation` | string | No       |                                               |
+| `department`  | string | No       |                                               |
 
 ```json
 {
-  "name": "Charlie New",
-  "email": "charlie@ozmo.io",
-  "password": "Secure@789"
+  "firstName": "Jane",
+  "lastName": "Smith",
+  "email": "jane.smith@ozmo.io",
+  "password": "Secure@789",
+  "role": "STAFF",
+  "department": "Engineering"
 }
 ```
 
-#### cURL
-
-```bash
-curl -X POST http://localhost:4000/api/v1/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "Charlie New",
-    "email": "charlie@ozmo.io",
-    "password": "Secure@789"
-  }'
-```
-
-#### Response — `201 Created`
+##### Response — `201 Created`
 
 ```json
 {
@@ -225,68 +294,65 @@ curl -X POST http://localhost:4000/api/v1/auth/register \
     "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
     "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
     "user": {
-      "id": "c3bfdcf7-f528-45cb-80c7-590ecb3c3c46",
-      "name": "Charlie New",
-      "email": "charlie@ozmo.io",
-      "role": "user",
-      "createdAt": "2026-05-27T17:03:58.461Z"
+      "id": "3f2e1a4b-...",
+      "employeeId": "OZ-2026-0001",
+      "firstName": "Jane",
+      "lastName": "Smith",
+      "email": "jane.smith@ozmo.io",
+      "role": "STAFF",
+      "department": "Engineering",
+      "status": "ACTIVE",
+      "createdAt": "2026-05-31T10:00:00.000Z"
     }
   },
-  "timestamp": "2026-05-27T17:03:58.655Z"
+  "timestamp": "2026-05-31T10:00:00.000Z"
 }
 ```
 
-#### Error — `409 Conflict` (Duplicate Email)
-
-```json
-{
-  "success": false,
-  "message": "Email already in use",
-  "timestamp": "2026-05-27T17:05:00.000Z"
-}
+```bash
+curl -X POST http://localhost:4000/api/v1/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "firstName": "Jane",
+    "lastName": "Smith",
+    "email": "jane.smith@ozmo.io",
+    "password": "Secure@789",
+    "role": "STAFF",
+    "department": "Engineering"
+  }'
 ```
 
 ---
 
-### 3. Login
+#### Login
 
-Authenticate with email and password to receive tokens.
+Authenticate with **email** or **employeeId** plus password.
 
-**Endpoint:** `POST /api/v1/auth/login`
-**Auth:** None
+**`POST /api/v1/auth/login`** — Auth: None
 
-#### Request Headers
+##### Request Body
 
-```
-Content-Type: application/json
-```
-
-#### Request Body
-
-| Field      | Type   | Required | Description     |
-| ---------- | ------ | -------- | --------------- |
-| `email`    | string | ✅       | Registered email|
-| `password` | string | ✅       | User password   |
+| Field        | Type   | Required         | Description                        |
+| ------------ | ------ | :--------------: | ---------------------------------- |
+| `email`      | string | One of these two | Registered email address           |
+| `employeeId` | string | One of these two | e.g. `OZ-2026-0001`               |
+| `password`   | string | Yes              | Account password                   |
 
 ```json
 {
-  "email": "alice@ozmo.io",
-  "password": "Password@123"
+  "email": "jane.smith@ozmo.io",
+  "password": "Secure@789"
 }
 ```
 
-#### cURL
-
-```bash
-curl -X POST http://localhost:4000/api/v1/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{
-    "email": "alice@ozmo.io",
-    "password": "Password@123"
-  }'
+```json
+{
+  "employeeId": "OZ-2026-0001",
+  "password": "Secure@789"
+}
 ```
 
-#### Response — `200 OK`
+##### Response — `200 OK`
 
 ```json
 {
@@ -296,108 +362,38 @@ curl -X POST http://localhost:4000/api/v1/auth/login \
     "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
     "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
     "user": {
-      "id": "usr_001",
-      "name": "Alice Admin",
-      "email": "alice@ozmo.io",
-      "role": "admin",
-      "createdAt": "2025-01-01T00:00:00.000Z"
+      "id": "3f2e1a4b-...",
+      "employeeId": "OZ-2026-0001",
+      "firstName": "Jane",
+      "lastName": "Smith",
+      "email": "jane.smith@ozmo.io",
+      "role": "STAFF",
+      "status": "ACTIVE"
     }
   },
-  "timestamp": "2026-05-27T17:03:40.069Z"
+  "timestamp": "2026-05-31T10:00:00.000Z"
 }
 ```
-
-#### Error — `401 Unauthorized`
-
-```json
-{
-  "success": false,
-  "message": "Invalid email or password",
-  "timestamp": "2026-05-27T17:03:06.906Z"
-}
-```
-
----
-
-### 4. Get Profile
-
-Fetch the authenticated user's profile.
-
-**Endpoint:** `GET /api/v1/user/profile`
-**Auth:** 🔒 Bearer Token (required)
-
-#### Request Headers
-
-```
-Authorization: Bearer <ACCESS_TOKEN>
-```
-
-#### cURL
 
 ```bash
-curl -X GET http://localhost:4000/api/v1/user/profile \
-  -H "Authorization: Bearer <ACCESS_TOKEN>"
-```
-
-#### Response — `200 OK`
-
-```json
-{
-  "success": true,
-  "message": "Profile fetched successfully",
-  "data": {
-    "user": {
-      "id": "usr_001",
-      "name": "Alice Admin",
-      "email": "alice@ozmo.io",
-      "role": "admin",
-      "createdAt": "2025-01-01T00:00:00.000Z"
-    }
-  },
-  "timestamp": "2026-05-27T17:03:50.232Z"
-}
-```
-
-#### Error — `401 Unauthorized` (Missing/Invalid Token)
-
-```json
-{
-  "success": false,
-  "message": "No token provided — Bearer <token> required",
-  "timestamp": "2026-05-27T17:05:00.000Z"
-}
-```
-
-#### Error — `401 Unauthorized` (Expired Token)
-
-```json
-{
-  "success": false,
-  "message": "Access token expired — please refresh",
-  "timestamp": "2026-05-27T17:20:00.000Z"
-}
+curl -X POST http://localhost:4000/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"jane.smith@ozmo.io","password":"Secure@789"}'
 ```
 
 ---
 
-### 5. Refresh Token
+#### Refresh Token
 
-Exchange a valid refresh token for a new access + refresh token pair.
+Exchange a valid refresh token for a new access + refresh pair. The used token is immediately invalidated (rotation).
 
-**Endpoint:** `POST /api/v1/auth/refresh`
-**Auth:** None (uses refresh token in body)
+**`POST /api/v1/auth/refresh`** — Auth: None
 
-#### Request Headers
+##### Request Body
 
-```
-Content-Type: application/json
-```
-
-#### Request Body
-
-| Field          | Type   | Required | Description                      |
-| -------------- | ------ | -------- | -------------------------------- |
-| `refreshToken` | string | ✅       | Refresh token from login/register|
+| Field          | Type   | Required | Description         |
+| -------------- | ------ | :------: | ------------------- |
+| `refreshToken` | string | Yes      | Valid refresh token |
 
 ```json
 {
@@ -405,17 +401,7 @@ Content-Type: application/json
 }
 ```
 
-#### cURL
-
-```bash
-curl -X POST http://localhost:4000/api/v1/auth/refresh \
-  -H "Content-Type: application/json" \
-  -d '{
-    "refreshToken": "<REFRESH_TOKEN>"
-  }'
-```
-
-#### Response — `200 OK`
+##### Response — `200 OK`
 
 ```json
 {
@@ -424,84 +410,588 @@ curl -X POST http://localhost:4000/api/v1/auth/refresh \
   "data": {
     "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...(new)",
     "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...(new)",
-    "user": {
-      "id": "usr_001",
-      "name": "Alice Admin",
-      "email": "alice@ozmo.io",
-      "role": "admin",
-      "createdAt": "2025-01-01T00:00:00.000Z"
-    }
+    "user": { "id": "3f2e1a4b-...", "email": "jane.smith@ozmo.io" }
   },
-  "timestamp": "2026-05-27T17:10:00.000Z"
+  "timestamp": "2026-05-31T10:05:00.000Z"
 }
 ```
 
-#### Error — `401 Unauthorized`
-
-```json
-{
-  "success": false,
-  "message": "Invalid or expired refresh token",
-  "timestamp": "2026-05-27T17:10:00.000Z"
-}
+```bash
+curl -X POST http://localhost:4000/api/v1/auth/refresh \
+  -H "Content-Type: application/json" \
+  -d '{"refreshToken":"<REFRESH_TOKEN>"}'
 ```
 
 ---
 
-### 6. Logout
+#### Logout
 
-Invalidate the user's refresh token (server-side logout).
+Invalidate the server-side refresh token.
 
-**Endpoint:** `POST /api/v1/auth/logout`
-**Auth:** 🔒 Bearer Token (required)
+**`POST /api/v1/auth/logout`** — Auth: Bearer token
 
-#### Request Headers
-
-```
-Authorization: Bearer <ACCESS_TOKEN>
-```
-
-#### cURL
-
-```bash
-curl -X POST http://localhost:4000/api/v1/auth/logout \
-  -H "Authorization: Bearer <ACCESS_TOKEN>"
-```
-
-#### Response — `200 OK`
+##### Response — `200 OK`
 
 ```json
 {
   "success": true,
   "message": "Logged out successfully",
   "data": {},
-  "timestamp": "2026-05-27T17:15:00.000Z"
+  "timestamp": "2026-05-31T10:10:00.000Z"
+}
+```
+
+```bash
+curl -X POST http://localhost:4000/api/v1/auth/logout \
+  -H "Authorization: Bearer <ACCESS_TOKEN>"
+```
+
+---
+
+### Profile
+
+#### Get Own Profile
+
+**`GET /api/v1/profile`** — Auth: Bearer token | Roles: Any
+
+```bash
+curl http://localhost:4000/api/v1/profile \
+  -H "Authorization: Bearer <ACCESS_TOKEN>"
+```
+
+##### Response — `200 OK`
+
+```json
+{
+  "success": true,
+  "message": "Profile fetched successfully",
+  "data": {
+    "id": "3f2e1a4b-...",
+    "employeeId": "OZ-2026-0001",
+    "firstName": "Jane",
+    "lastName": "Smith",
+    "email": "jane.smith@ozmo.io",
+    "role": "STAFF",
+    "department": "Engineering",
+    "status": "ACTIVE",
+    "createdAt": "2026-05-31T10:00:00.000Z"
+  },
+  "timestamp": "2026-05-31T10:00:00.000Z"
 }
 ```
 
 ---
 
-## ❌ Error Responses
+#### Update Own Profile
 
-### Validation Error — `422 Unprocessable Entity`
+**`PUT /api/v1/profile`** — Auth: Bearer token | Roles: Any
 
-Returned when request body fails validation rules.
+All fields are optional. Email, password, and role cannot be changed here.
+
+##### Request Body
+
+| Field         | Type   | Validation  |
+| ------------- | ------ | ----------- |
+| `firstName`   | string | 2–50 chars  |
+| `lastName`    | string | 2–50 chars  |
+| `phone`       | string |             |
+| `designation` | string |             |
+| `department`  | string |             |
+
+```json
+{
+  "phone": "+60123456789",
+  "department": "Product"
+}
+```
+
+```bash
+curl -X PUT http://localhost:4000/api/v1/profile \
+  -H "Authorization: Bearer <ACCESS_TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{"phone":"+60123456789","department":"Product"}'
+```
+
+##### Response — `200 OK`
+
+```json
+{
+  "success": true,
+  "message": "Profile updated successfully",
+  "data": { "id": "3f2e1a4b-...", "phone": "+60123456789", "department": "Product" },
+  "timestamp": "2026-05-31T10:00:00.000Z"
+}
+```
+
+---
+
+#### List All Users
+
+**`GET /api/v1/users`** — Auth: Bearer token | Roles: `ADMIN` `HR` `MANAGER`
+
+```bash
+curl http://localhost:4000/api/v1/users \
+  -H "Authorization: Bearer <ACCESS_TOKEN>"
+```
+
+##### Response — `200 OK`
+
+```json
+{
+  "success": true,
+  "message": "Users fetched successfully",
+  "data": [
+    {
+      "id": "...",
+      "employeeId": "OZ-2026-0001",
+      "firstName": "Jane",
+      "lastName": "Smith",
+      "role": "STAFF",
+      "status": "ACTIVE"
+    }
+  ],
+  "timestamp": "2026-05-31T10:00:00.000Z"
+}
+```
+
+---
+
+#### Get User by ID
+
+**`GET /api/v1/users/:id`** — Auth: Bearer token | Roles: `ADMIN` `HR` `MANAGER`
+
+```bash
+curl http://localhost:4000/api/v1/users/3f2e1a4b-... \
+  -H "Authorization: Bearer <ACCESS_TOKEN>"
+```
+
+---
+
+#### Delete User
+
+**`DELETE /api/v1/users/:id`** — Auth: Bearer token | Roles: `ADMIN`
+
+Note: Cannot delete your own account (returns `403`).
+
+```bash
+curl -X DELETE http://localhost:4000/api/v1/users/3f2e1a4b-... \
+  -H "Authorization: Bearer <ACCESS_TOKEN>"
+```
+
+##### Response — `200 OK`
+
+```json
+{
+  "success": true,
+  "message": "User deleted successfully",
+  "data": {},
+  "timestamp": "2026-05-31T10:00:00.000Z"
+}
+```
+
+---
+
+### Attendance
+
+#### Check In
+
+**`POST /api/v1/attendance/check-in`** — Auth: Bearer token | Roles: `STAFF` `TEAM_LEAD`
+
+Returns `409 Conflict` if already checked in without checking out.
+
+##### Request Body (all optional)
+
+| Field         | Type   | Description                                    |
+| ------------- | ------ | ---------------------------------------------- |
+| `checkInTime` | string | ISO 8601 datetime. Defaults to server `NOW()`  |
+| `notes`       | string | Optional note                                  |
+
+```json
+{
+  "notes": "Working from home today"
+}
+```
+
+```bash
+curl -X POST http://localhost:4000/api/v1/attendance/check-in \
+  -H "Authorization: Bearer <ACCESS_TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{"notes":"Working from home today"}'
+```
+
+##### Response — `201 Created`
+
+```json
+{
+  "success": true,
+  "message": "Check-in recorded",
+  "data": {
+    "id": "a1b2c3d4-...",
+    "userId": "3f2e1a4b-...",
+    "checkInTime": "2026-05-31T09:00:00.000Z",
+    "checkOutTime": null,
+    "notes": "Working from home today"
+  },
+  "timestamp": "2026-05-31T09:00:00.000Z"
+}
+```
+
+---
+
+#### Check Out
+
+**`POST /api/v1/attendance/check-out`** — Auth: Bearer token | Roles: `STAFF` `TEAM_LEAD`
+
+Returns `404` if no open check-in exists.
+
+```bash
+curl -X POST http://localhost:4000/api/v1/attendance/check-out \
+  -H "Authorization: Bearer <ACCESS_TOKEN>"
+```
+
+##### Response — `200 OK`
+
+```json
+{
+  "success": true,
+  "message": "Check-out recorded",
+  "data": {
+    "id": "a1b2c3d4-...",
+    "checkInTime": "2026-05-31T09:00:00.000Z",
+    "checkOutTime": "2026-05-31T17:30:00.000Z",
+    "durationMinutes": 510
+  },
+  "timestamp": "2026-05-31T17:30:00.000Z"
+}
+```
+
+---
+
+#### Get My Attendance
+
+**`GET /api/v1/attendance/my`** — Auth: Bearer token | Roles: Any
+
+##### Query Parameters (all optional)
+
+| Param   | Format       | Example            | Description           |
+| ------- | ------------ | ------------------ | --------------------- |
+| `date`  | `YYYY-MM-DD` | `?date=2026-05-31` | Single day            |
+| `week`  | `YYYY-WNN`   | `?week=2026-W22`   | ISO calendar week     |
+| `month` | `YYYY-MM`    | `?month=2026-05`   | Full month            |
+| `from`  | `YYYY-MM-DD` | `?from=2026-05-01` | Start of custom range |
+| `to`    | `YYYY-MM-DD` | `?to=2026-05-31`   | End of custom range   |
+
+```bash
+curl "http://localhost:4000/api/v1/attendance/my?month=2026-05" \
+  -H "Authorization: Bearer <ACCESS_TOKEN>"
+```
+
+##### Response — `200 OK`
+
+```json
+{
+  "success": true,
+  "message": "Attendance fetched",
+  "data": [
+    {
+      "id": "a1b2c3d4-...",
+      "checkInTime": "2026-05-31T09:00:00.000Z",
+      "checkOutTime": "2026-05-31T17:30:00.000Z",
+      "durationMinutes": 510,
+      "notes": null
+    }
+  ],
+  "timestamp": "2026-05-31T10:00:00.000Z"
+}
+```
+
+---
+
+#### Get Attendance Dashboard
+
+**`GET /api/v1/attendance/dashboard`** — Auth: Bearer token | Roles: `ADMIN` `HR` `MANAGER`
+
+Returns aggregated presence stats for all staff. Accepts the same query params as `/attendance/my`. Defaults to today if no query is provided.
+
+```bash
+curl "http://localhost:4000/api/v1/attendance/dashboard?date=2026-05-31" \
+  -H "Authorization: Bearer <ACCESS_TOKEN>"
+```
+
+##### Response — `200 OK`
+
+```json
+{
+  "success": true,
+  "message": "Dashboard data fetched",
+  "data": {
+    "date": "2026-05-31",
+    "summary": { "present": 18, "absent": 4, "late": 2 },
+    "records": [
+      {
+        "userId": "...",
+        "employeeId": "OZ-2026-0001",
+        "firstName": "Jane",
+        "checkInTime": "2026-05-31T09:00:00.000Z"
+      }
+    ]
+  },
+  "timestamp": "2026-05-31T10:00:00.000Z"
+}
+```
+
+---
+
+#### Get Attendance for a User
+
+**`GET /api/v1/attendance/:userId`** — Auth: Bearer token | Roles: `ADMIN` `HR` `MANAGER`
+
+Accepts the same query parameters as `/attendance/my`.
+
+```bash
+curl "http://localhost:4000/api/v1/attendance/3f2e1a4b-...?month=2026-05" \
+  -H "Authorization: Bearer <ACCESS_TOKEN>"
+```
+
+---
+
+### Staff Management
+
+#### Create Staff Member
+
+**`POST /api/v1/staff`** — Auth: Bearer token | Roles: `ADMIN` `HR`
+
+##### Request Body
+
+| Field         | Type   | Required | Validation                                 |
+| ------------- | ------ | :------: | ------------------------------------------ |
+| `firstName`   | string | Yes      | 2–50 characters                            |
+| `lastName`    | string | Yes      | 2–50 characters                            |
+| `email`       | string | Yes      | Valid email, normalized to lowercase       |
+| `password`    | string | Yes      | Min 8 chars, at least 1 uppercase, 1 digit |
+| `role`        | enum   | Yes      | Role enum value                            |
+| `phone`       | string | No       |                                            |
+| `designation` | string | No       |                                            |
+| `department`  | string | No       |                                            |
+| `joiningDate` | string | No       | ISO 8601 date                              |
+
+```json
+{
+  "firstName": "Ahmad",
+  "lastName": "Razif",
+  "email": "ahmad.razif@ozmo.io",
+  "password": "Welcome@123",
+  "role": "MANAGER",
+  "department": "Operations",
+  "joiningDate": "2026-06-01"
+}
+```
+
+```bash
+curl -X POST http://localhost:4000/api/v1/staff \
+  -H "Authorization: Bearer <ACCESS_TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "firstName": "Ahmad",
+    "lastName": "Razif",
+    "email": "ahmad.razif@ozmo.io",
+    "password": "Welcome@123",
+    "role": "MANAGER",
+    "department": "Operations"
+  }'
+```
+
+##### Response — `201 Created`
+
+```json
+{
+  "success": true,
+  "message": "Staff member created",
+  "data": {
+    "id": "...",
+    "employeeId": "OZ-2026-0002",
+    "firstName": "Ahmad",
+    "lastName": "Razif",
+    "email": "ahmad.razif@ozmo.io",
+    "role": "MANAGER",
+    "department": "Operations",
+    "status": "ACTIVE"
+  },
+  "timestamp": "2026-05-31T10:00:00.000Z"
+}
+```
+
+---
+
+#### List All Staff
+
+**`GET /api/v1/staff`** — Auth: Bearer token | Roles: `ADMIN` `HR` `MANAGER`
+
+```bash
+curl http://localhost:4000/api/v1/staff \
+  -H "Authorization: Bearer <ACCESS_TOKEN>"
+```
+
+---
+
+#### Search Staff
+
+**`GET /api/v1/staff/search?q=`** — Auth: Bearer token | Roles: `ADMIN` `HR` `MANAGER`
+
+Searches across `firstName`, `lastName`, `email`, `employeeId`, and `department`.
+
+| Param | Type   | Required | Description    |
+| ----- | ------ | :------: | -------------- |
+| `q`   | string | Yes      | Search keyword |
+
+```bash
+curl "http://localhost:4000/api/v1/staff/search?q=ahmad" \
+  -H "Authorization: Bearer <ACCESS_TOKEN>"
+```
+
+##### Response — `200 OK`
+
+```json
+{
+  "success": true,
+  "message": "Search results",
+  "data": [
+    {
+      "employeeId": "OZ-2026-0002",
+      "firstName": "Ahmad",
+      "lastName": "Razif",
+      "department": "Operations",
+      "status": "ACTIVE"
+    }
+  ],
+  "timestamp": "2026-05-31T10:00:00.000Z"
+}
+```
+
+---
+
+#### Filter Staff
+
+**`GET /api/v1/staff/filter`** — Auth: Bearer token | Roles: `ADMIN` `HR` `MANAGER`
+
+| Param        | Type   | Values                                                       |
+| ------------ | ------ | ------------------------------------------------------------ |
+| `department` | string | Any string                                                   |
+| `status`     | enum   | `ACTIVE` `INACTIVE` `RESIGNED` `TERMINATED`                  |
+| `role`       | enum   | `SUPER_ADMIN` `ADMIN` `HR` `MANAGER` `TEAM_LEAD` `STAFF` `GUEST` |
+
+```bash
+curl "http://localhost:4000/api/v1/staff/filter?department=Engineering&status=ACTIVE" \
+  -H "Authorization: Bearer <ACCESS_TOKEN>"
+```
+
+---
+
+#### Get Staff by ID
+
+**`GET /api/v1/staff/:id`** — Auth: Bearer token | Roles: `ADMIN` `HR` `MANAGER` `TEAM_LEAD`
+
+```bash
+curl http://localhost:4000/api/v1/staff/3f2e1a4b-... \
+  -H "Authorization: Bearer <ACCESS_TOKEN>"
+```
+
+---
+
+#### Update Staff
+
+**`PUT /api/v1/staff/:id`** — Auth: Bearer token | Roles: `ADMIN` `HR`
+
+All fields are optional. Accepts the same fields as [Create Staff Member](#create-staff-member) plus `status`.
+
+| Field    | Type | Values                                        |
+| -------- | ---- | --------------------------------------------- |
+| `status` | enum | `ACTIVE` `INACTIVE` `RESIGNED` `TERMINATED`   |
+
+```json
+{
+  "designation": "Senior Engineer",
+  "status": "INACTIVE"
+}
+```
+
+```bash
+curl -X PUT http://localhost:4000/api/v1/staff/3f2e1a4b-... \
+  -H "Authorization: Bearer <ACCESS_TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{"designation":"Senior Engineer","status":"INACTIVE"}'
+```
+
+##### Response — `200 OK`
+
+```json
+{
+  "success": true,
+  "message": "Staff member updated",
+  "data": { "id": "...", "designation": "Senior Engineer", "status": "INACTIVE" },
+  "timestamp": "2026-05-31T10:00:00.000Z"
+}
+```
+
+---
+
+#### Delete Staff
+
+**`DELETE /api/v1/staff/:id`** — Auth: Bearer token | Roles: `ADMIN`
+
+Note: Cannot delete your own account (returns `403`).
+
+```bash
+curl -X DELETE http://localhost:4000/api/v1/staff/3f2e1a4b-... \
+  -H "Authorization: Bearer <ACCESS_TOKEN>"
+```
+
+##### Response — `200 OK`
+
+```json
+{
+  "success": true,
+  "message": "Staff member deleted",
+  "data": {},
+  "timestamp": "2026-05-31T10:00:00.000Z"
+}
+```
+
+---
+
+## Error Responses
+
+### Validation Error — `400 Bad Request`
 
 ```json
 {
   "success": false,
   "message": "Validation failed",
   "errors": [
-    {
-      "field": "email",
-      "message": "Must be a valid email address"
-    },
-    {
-      "field": "password",
-      "message": "Password is required"
-    }
+    { "field": "email", "message": "email must be an email" },
+    { "field": "password", "message": "password must contain at least one uppercase letter" }
   ],
-  "timestamp": "2026-05-27T17:05:00.000Z"
+  "timestamp": "2026-05-31T10:00:00.000Z"
+}
+```
+
+### Unauthorized — `401 Unauthorized`
+
+```json
+{
+  "success": false,
+  "message": "Unauthorized",
+  "timestamp": "2026-05-31T10:00:00.000Z"
+}
+```
+
+### Forbidden — `403 Forbidden`
+
+```json
+{
+  "success": false,
+  "message": "Role 'STAFF' is not permitted to access this resource",
+  "timestamp": "2026-05-31T10:00:00.000Z"
 }
 ```
 
@@ -510,18 +1000,18 @@ Returned when request body fails validation rules.
 ```json
 {
   "success": false,
-  "message": "Route GET /api/v1/unknown not found",
-  "timestamp": "2026-05-27T17:05:00.000Z"
+  "message": "Staff member not found",
+  "timestamp": "2026-05-31T10:00:00.000Z"
 }
 ```
 
-### Rate Limited — `429 Too Many Requests`
+### Conflict — `409 Conflict`
 
 ```json
 {
   "success": false,
-  "message": "Too many authentication attempts — please try again in 15 minutes",
-  "timestamp": "2026-05-27T17:05:00.000Z"
+  "message": "Already checked in — please check out first",
+  "timestamp": "2026-05-31T10:00:00.000Z"
 }
 ```
 
@@ -530,41 +1020,28 @@ Returned when request body fails validation rules.
 ```json
 {
   "success": false,
-  "message": "Something went wrong",
-  "timestamp": "2026-05-27T17:05:00.000Z"
+  "message": "Internal server error",
+  "timestamp": "2026-05-31T10:00:00.000Z"
 }
 ```
 
 ---
 
-## 👤 Seed Users
+## HTTP Status Codes
 
-The project comes with two pre-seeded users in `src/data/users.json`.
-
-| Name        | Email          | Password       | Role    |
-| ----------- | -------------- | -------------- | ------- |
-| Alice Admin | alice@ozmo.io  | `Password@123` | `admin` |
-| Bob User    | bob@ozmo.io    | `Password@123` | `user`  |
-
----
-
-## 📝 HTTP Status Codes Reference
-
-| Code | Meaning                 | Used For                          |
-| ---- | ----------------------- | --------------------------------- |
-| 200  | OK                      | Successful read/update/delete     |
-| 201  | Created                 | Successful resource creation      |
-| 401  | Unauthorized            | Invalid/missing/expired token     |
-| 403  | Forbidden               | Insufficient role permissions     |
-| 404  | Not Found               | Route or resource does not exist  |
-| 409  | Conflict                | Duplicate email on registration   |
-| 413  | Payload Too Large       | Request body exceeds 10kb limit   |
-| 422  | Unprocessable Entity    | Request validation failed         |
-| 429  | Too Many Requests       | Rate limit exceeded               |
-| 500  | Internal Server Error   | Unexpected server failure         |
+| Code | Meaning               | Used For                                       |
+| ---- | --------------------- | ---------------------------------------------- |
+| 200  | OK                    | Successful read, update, logout, check-out     |
+| 201  | Created               | Register, check-in, staff create               |
+| 400  | Bad Request           | Validation errors, missing required fields     |
+| 401  | Unauthorized          | Missing, invalid, or expired token             |
+| 403  | Forbidden             | Insufficient role, or self-delete attempt      |
+| 404  | Not Found             | Resource does not exist                        |
+| 409  | Conflict              | Duplicate email, double check-in               |
+| 500  | Internal Server Error | Unexpected server failure                      |
 
 ---
 
-## 📄 License
+## License
 
 UNLICENSED — © OZMO-INNOVATIONS
