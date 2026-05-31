@@ -1,0 +1,824 @@
+{
+  "info": {
+    "name": "Ozmo Sync API — Industrial Grade Tests",
+    "description": "Comprehensive test suite covering all endpoints, happy paths, error scenarios, RBAC, edge cases, and data validation.\n\nRun with Newman:\n  npx newman run postman/ozmo-sync-api-tests.postman_collection.json -e postman/ozmo-sync-api.environment.json --delay-request 300",
+    "schema": "https://schema.getpostman.com/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:4000", "type": "string" },
+    { "key": "uniqueEmail", "value": "", "type": "string" },
+    { "key": "uniqueName", "value": "", "type": "string" },
+    { "key": "accessToken", "value": "", "type": "string" },
+    { "key": "refreshToken", "value": "", "type": "string" },
+    { "key": "adminAccessToken", "value": "", "type": "string" },
+    { "key": "userAccessToken", "value": "", "type": "string" },
+    { "key": "regUserAccessToken", "value": "", "type": "string" },
+    { "key": "regUserRefreshToken", "value": "", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "🩺 1. Health & Server Checks",
+      "item": [
+        {
+          "name": "GET /health",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "const body = pm.response.json();",
+                "",
+                "pm.test('Status 200', () => pm.expect(pm.response.code).to.eql(200));",
+                "pm.test('Response time < 500ms', () => pm.expect(pm.response.responseTime).to.be.below(500));",
+                "pm.test('Content-Type is JSON', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json'));",
+                "pm.test('Has CORS header', () => pm.expect(pm.response.headers.get('access-control-allow-origin')).to.exist);",
+                "pm.test('No X-Powered-By header', () => pm.expect(pm.response.headers.get('x-powered-by')).to.not.exist);",
+                "",
+                "pm.test('Schema matches', () => {",
+                "  pm.expect(body).to.have.property('success', true);",
+                "  pm.expect(body).to.have.property('message', 'Service is healthy');",
+                "  pm.expect(body).to.have.property('app');",
+                "  pm.expect(body).to.have.property('env');",
+                "  pm.expect(body).to.have.property('timestamp');",
+                "  pm.expect(body.env).to.be.oneOf(['development', 'production', 'test']);",
+                "  pm.expect(body.timestamp).to.match(/^\\d{4}-\\d{2}-\\d{2}T/);",
+                "});"
+              ],
+              "type": "text/javascript"
+            }
+          }],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/health", "host": ["{{baseUrl}}"], "path": ["health"] }
+          }
+        },
+        {
+          "name": "GET /api/v1/unknown — 404",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "const body = pm.response.json();",
+                "pm.test('Status 404', () => pm.expect(pm.response.code).to.eql(404));",
+                "pm.test('Correct error format', () => {",
+                "  pm.expect(body).to.have.property('success', false);",
+                "  pm.expect(body.message).to.include('not found');",
+                "  pm.expect(body).to.have.property('timestamp');",
+                "  pm.expect(body).to.not.have.property('data');",
+                "});"
+              ],
+              "type": "text/javascript"
+            }
+          }],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/v1/nonexistent-route", "host": ["{{baseUrl}}"], "path": ["api", "v1", "nonexistent-route"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "🔐 2. Authentication Flow",
+      "item": [
+        {
+          "name": "POST /auth/register — Create user",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "const ts = Date.now();",
+                  "const rnd = Math.floor(Math.random() * 100000);",
+                  "pm.collectionVariables.set('uniqueEmail', `autotest.${ts}.${rnd}@ozmo.io`);",
+                  "pm.collectionVariables.set('uniqueName', `Auto Test ${rnd}`);"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const body = pm.response.json();",
+                  "",
+                  "pm.test('Status 201', () => pm.expect(pm.response.code).to.eql(201));",
+                  "pm.test('Response time < 1000ms', () => pm.expect(pm.response.responseTime).to.be.below(1000));",
+                  "pm.test('Registration successful', () => {",
+                  "  pm.expect(body).to.have.property('success', true);",
+                  "  pm.expect(body).to.have.property('message', 'Registration successful');",
+                  "  pm.expect(body.data).to.have.property('accessToken');",
+                  "  pm.expect(body.data).to.have.property('refreshToken');",
+                  "});",
+                  "pm.test('User object is valid', () => {",
+                  "  const user = body.data.user;",
+                  "  pm.expect(user).to.have.property('id');",
+                  "  pm.expect(user).to.have.property('name');",
+                  "  pm.expect(user).to.have.property('email');",
+                  "  pm.expect(user.email).to.match(/@ozmo\\.io$/);",
+                  "  pm.expect(user).to.have.property('role', 'user');",
+                  "  pm.expect(user).to.have.property('createdAt');",
+                  "  pm.expect(user).to.not.have.property('password');",
+                  "  pm.expect(user).to.not.have.property('isBlocked');",
+                  "});",
+                  "pm.test('Tokens are valid JWTs', () => {",
+                  "  pm.expect(body.data.accessToken).to.match(/^[A-Za-z0-9-_]+\\.[A-Za-z0-9-_]+\\.[A-Za-z0-9-_]+$/);",
+                  "  pm.expect(body.data.refreshToken).to.match(/^[A-Za-z0-9-_]+\\.[A-Za-z0-9-_]+\\.[A-Za-z0-9-_]+$/);",
+                  "});",
+                  "",
+                  "pm.collectionVariables.set('accessToken', body.data.accessToken);",
+                  "pm.collectionVariables.set('refreshToken', body.data.refreshToken);",
+                  "pm.collectionVariables.set('regUserAccessToken', body.data.accessToken);",
+                  "pm.collectionVariables.set('regUserRefreshToken', body.data.refreshToken);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"{{uniqueName}}\",\n  \"email\": \"{{uniqueEmail}}\",\n  \"password\": \"Secure@789\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/v1/auth/register", "host": ["{{baseUrl}}"], "path": ["api", "v1", "auth", "register"] }
+          }
+        },
+        {
+          "name": "POST /auth/register — Duplicate email (409)",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "const body = pm.response.json();",
+                "pm.test('Status 409', () => pm.expect(pm.response.code).to.eql(409));",
+                "pm.test('Correct error', () => {",
+                "  pm.expect(body).to.have.property('success', false);",
+                "  pm.expect(body).to.have.property('message', 'Email already in use');",
+                "  pm.expect(body).to.have.property('timestamp');",
+                "});"
+              ],
+              "type": "text/javascript"
+            }
+          }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"{{uniqueName}}\",\n  \"email\": \"{{uniqueEmail}}\",\n  \"password\": \"Secure@789\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/v1/auth/register", "host": ["{{baseUrl}}"], "path": ["api", "v1", "auth", "register"] }
+          }
+        },
+        {
+          "name": "POST /auth/login — Alice (admin)",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "const body = pm.response.json();",
+                "",
+                "pm.test('Status 200', () => pm.expect(pm.response.code).to.eql(200));",
+                "pm.test('Login successful', () => {",
+                "  pm.expect(body).to.have.property('success', true);",
+                "  pm.expect(body).to.have.property('message', 'Login successful');",
+                "  pm.expect(body.data).to.have.property('accessToken');",
+                "  pm.expect(body.data).to.have.property('refreshToken');",
+                "  pm.expect(body.data).to.have.property('user');",
+                "});",
+                "pm.test('User is admin', () => {",
+                "  pm.expect(body.data.user.email).to.eql('alice@ozmo.io');",
+                "  pm.expect(body.data.user.role).to.eql('admin');",
+                "  pm.expect(body.data.user).to.not.have.property('password');",
+                "  pm.expect(body.data.user).to.not.have.property('isBlocked');",
+                "});",
+                "",
+                "pm.collectionVariables.set('adminAccessToken', body.data.accessToken);"
+              ],
+              "type": "text/javascript"
+            }
+          }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"alice@ozmo.io\",\n  \"password\": \"Password@123\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/v1/auth/login", "host": ["{{baseUrl}}"], "path": ["api", "v1", "auth", "login"] }
+          }
+        },
+        {
+          "name": "POST /auth/login — Bob (user)",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "const body = pm.response.json();",
+                "",
+                "pm.test('Status 200', () => pm.expect(pm.response.code).to.eql(200));",
+                "pm.test('Login successful', () => {",
+                "  pm.expect(body).to.have.property('success', true);",
+                "  pm.expect(body.data.user.email).to.eql('bob@ozmo.io');",
+                "});"
+              ],
+              "type": "text/javascript"
+            }
+          }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"bob@ozmo.io\",\n  \"password\": \"Password@123\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/v1/auth/login", "host": ["{{baseUrl}}"], "path": ["api", "v1", "auth", "login"] }
+          }
+        },
+        {
+          "name": "POST /auth/login — Wrong password (401)",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "const body = pm.response.json();",
+                "pm.test('Status 401', () => pm.expect(pm.response.code).to.eql(401));",
+                "pm.test('Generic error (no enumeration)', () => {",
+                "  pm.expect(body).to.have.property('success', false);",
+                "  pm.expect(body).to.have.property('message', 'Invalid email or password');",
+                "});"
+              ],
+              "type": "text/javascript"
+            }
+          }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"alice@ozmo.io\",\n  \"password\": \"WRONG_PASSWORD_12345\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/v1/auth/login", "host": ["{{baseUrl}}"], "path": ["api", "v1", "auth", "login"] }
+          }
+        },
+        {
+          "name": "POST /auth/login — Non-existent email (401)",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "const body = pm.response.json();",
+                "pm.test('Status 401', () => pm.expect(pm.response.code).to.eql(401));",
+                "pm.test('Same error as wrong password', () => {",
+                "  pm.expect(body).to.have.property('message', 'Invalid email or password');",
+                "});"
+              ],
+              "type": "text/javascript"
+            }
+          }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"nonexistent@ozmo.io\",\n  \"password\": \"Password@123\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/v1/auth/login", "host": ["{{baseUrl}}"], "path": ["api", "v1", "auth", "login"] }
+          }
+        },
+        {
+          "name": "POST /auth/refresh — Refresh tokens",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "const body = pm.response.json();",
+                "",
+                "pm.test('Status 200', () => pm.expect(pm.response.code).to.eql(200));",
+                "pm.test('Tokens refreshed', () => {",
+                "  pm.expect(body).to.have.property('success', true);",
+                "  pm.expect(body).to.have.property('message', 'Tokens refreshed');",
+                "  pm.expect(body.data).to.have.property('accessToken');",
+                "  pm.expect(body.data).to.have.property('refreshToken');",
+                "  pm.expect(body.data).to.have.property('user');",
+                "});",
+                "",
+                "pm.collectionVariables.set('accessToken', body.data.accessToken);",
+                "pm.collectionVariables.set('refreshToken', body.data.refreshToken);"
+              ],
+              "type": "text/javascript"
+            }
+          }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/v1/auth/refresh", "host": ["{{baseUrl}}"], "path": ["api", "v1", "auth", "refresh"] }
+          }
+        },
+        {
+          "name": "POST /auth/refresh — Invalid token (422)",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "const body = pm.response.json();",
+                "pm.test('Status 422 (validation)', () => pm.expect(pm.response.code).to.eql(422));",
+                "pm.test('Validation error for invalid JWT format', () => {",
+                "  pm.expect(body).to.have.property('success', false);",
+                "  pm.expect(body).to.have.property('message', 'Validation failed');",
+                "  pm.expect(body.errors[0].message).to.include('Invalid refresh token format');",
+                "  pm.expect(body.errors[0].field).to.eql('refreshToken');",
+                "});"
+              ],
+              "type": "text/javascript"
+            }
+          }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"refreshToken\": \"invalid.refresh.token.here\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/v1/auth/refresh", "host": ["{{baseUrl}}"], "path": ["api", "v1", "auth", "refresh"] }
+          }
+        },
+        {
+          "name": "POST /auth/logout",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "const body = pm.response.json();",
+                "",
+                "pm.test('Status 200', () => pm.expect(pm.response.code).to.eql(200));",
+                "pm.test('Logout successful', () => {",
+                "  pm.expect(body).to.have.property('success', true);",
+                "  pm.expect(body).to.have.property('message', 'Logged out successfully');",
+                "  pm.expect(body.data).to.eql({});",
+                "  pm.expect(body).to.have.property('timestamp');",
+                "});"
+              ],
+              "type": "text/javascript"
+            }
+          }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminAccessToken}}" }],
+            "url": { "raw": "{{baseUrl}}/api/v1/auth/logout", "host": ["{{baseUrl}}"], "path": ["api", "v1", "auth", "logout"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "👤 3. Profile Endpoints",
+      "item": [
+        {
+          "name": "GET /user/profile — Admin token",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "const body = pm.response.json();",
+                "",
+                "pm.test('Status 200', () => pm.expect(pm.response.code).to.eql(200));",
+                "pm.test('Profile returned', () => {",
+                "  pm.expect(body).to.have.property('success', true);",
+                "  pm.expect(body).to.have.property('message', 'Profile fetched successfully');",
+                "  pm.expect(body.data).to.have.property('user');",
+                "});",
+                "pm.test('User has expected fields', () => {",
+                "  const user = body.data.user;",
+                "  pm.expect(user).to.have.all.keys('id', 'name', 'email', 'role', 'createdAt');",
+                "  pm.expect(user).to.not.have.property('password');",
+                "  pm.expect(user).to.not.have.property('isBlocked');",
+                "  pm.expect(user.id).to.be.a('number');",
+                "  pm.expect(user.role).to.eql('admin');",
+                "});"
+              ],
+              "type": "text/javascript"
+            }
+          }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminAccessToken}}" }],
+            "url": { "raw": "{{baseUrl}}/api/v1/user/profile", "host": ["{{baseUrl}}"], "path": ["api", "v1", "user", "profile"] }
+          }
+        },
+        {
+          "name": "GET /user/profile — Registered user token",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "const body = pm.response.json();",
+                "pm.test('Status 200', () => pm.expect(pm.response.code).to.eql(200));",
+                "pm.test('User profile', () => {",
+                "  pm.expect(body.data.user).to.have.property('email');",
+                "  pm.expect(body.data.user).to.have.property('role', 'user');",
+                "  pm.expect(body.data.user).to.not.have.property('password');",
+                "});"
+              ],
+              "type": "text/javascript"
+            }
+          }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{regUserAccessToken}}" }],
+            "url": { "raw": "{{baseUrl}}/api/v1/user/profile", "host": ["{{baseUrl}}"], "path": ["api", "v1", "user", "profile"] }
+          }
+        },
+        {
+          "name": "GET /user/profile — No token (401)",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "const body = pm.response.json();",
+                "pm.test('Status 401', () => pm.expect(pm.response.code).to.eql(401));",
+                "pm.test('Correct error', () => {",
+                "  pm.expect(body).to.have.property('success', false);",
+                "  pm.expect(body).to.have.property('message', 'No token provided — Bearer <token> required');",
+                "  pm.expect(body).to.not.have.property('data');",
+                "});"
+              ],
+              "type": "text/javascript"
+            }
+          }],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{baseUrl}}/api/v1/user/profile", "host": ["{{baseUrl}}"], "path": ["api", "v1", "user", "profile"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "🛡️ 4. Admin Operations & RBAC",
+      "item": [
+        {
+          "name": "GET /admin/users — As admin (200)",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "const body = pm.response.json();",
+                "",
+                "pm.test('Status 200', () => pm.expect(pm.response.code).to.eql(200));",
+                "pm.test('Users retrieved', () => {",
+                "  pm.expect(body).to.have.property('success', true);",
+                "  pm.expect(body).to.have.property('message', 'Users retrieved successfully');",
+                "  pm.expect(body.data.users).to.be.an('array');",
+                "  pm.expect(body.data.users.length).to.be.at.least(4);",
+                "  pm.expect(body.data).to.have.property('total');",
+                "});",
+                "pm.test('Users have no password field', () => {",
+                "  body.data.users.forEach(user => {",
+                "    pm.expect(user).to.not.have.property('password');",
+                "  });",
+                "});",
+                "pm.test('Contains seed users', () => {",
+                "  const emails = body.data.users.map(u => u.email);",
+                "  pm.expect(emails).to.include.members(['alice@ozmo.io', 'bob@ozmo.io']);",
+                "});"
+              ],
+              "type": "text/javascript"
+            }
+          }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminAccessToken}}" }],
+            "url": { "raw": "{{baseUrl}}/api/v1/admin/users", "host": ["{{baseUrl}}"], "path": ["api", "v1", "admin", "users"] }
+          }
+        },
+        {
+          "name": "GET /admin/users — As regular user (403)",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "const body = pm.response.json();",
+                "pm.test('Status 403', () => pm.expect(pm.response.code).to.eql(403));",
+                "pm.test('Insufficient permissions', () => {",
+                "  pm.expect(body).to.have.property('success', false);",
+                "  pm.expect(body.message).to.eql('You do not have permission to perform this action');",
+                "  pm.expect(body).to.not.have.property('data');",
+                "});"
+              ],
+              "type": "text/javascript"
+            }
+          }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{regUserAccessToken}}" }],
+            "url": { "raw": "{{baseUrl}}/api/v1/admin/users", "host": ["{{baseUrl}}"], "path": ["api", "v1", "admin", "users"] }
+          }
+        },
+        {
+          "name": "PATCH /admin/users/3/block",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "const body = pm.response.json();",
+                "pm.test('Status 200', () => pm.expect(pm.response.code).to.eql(200));",
+                "pm.test('User blocked', () => {",
+                "  pm.expect(body).to.have.property('success', true);",
+                "  pm.expect(body).to.have.property('message', 'User blocked successfully');",
+                "  pm.expect(body.data).to.have.property('id', 3);",
+                "  pm.expect(body.data).to.have.property('name', 'Super Admin');",
+                "  pm.expect(body.data).to.not.have.property('password');",
+                "  pm.expect(body.data).to.not.have.property('isBlocked');",
+                "});"
+              ],
+              "type": "text/javascript"
+            }
+          }],
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminAccessToken}}" }],
+            "url": { "raw": "{{baseUrl}}/api/v1/admin/users/3/block", "host": ["{{baseUrl}}"], "path": ["api", "v1", "admin", "users", "3", "block"] }
+          }
+        },
+        {
+          "name": "PATCH /admin/users/3/unblock",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "const body = pm.response.json();",
+                "pm.test('Status 200', () => pm.expect(pm.response.code).to.eql(200));",
+                "pm.test('User unblocked', () => {",
+                "  pm.expect(body).to.have.property('success', true);",
+                "  pm.expect(body).to.have.property('message', 'User unblocked successfully');",
+                "  pm.expect(body.data).to.have.property('id', 3);",
+                "  pm.expect(body.data).to.not.have.property('password');",
+                "  pm.expect(body.data).to.not.have.property('isBlocked');",
+                "});"
+              ],
+              "type": "text/javascript"
+            }
+          }],
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminAccessToken}}" }],
+            "url": { "raw": "{{baseUrl}}/api/v1/admin/users/3/unblock", "host": ["{{baseUrl}}"], "path": ["api", "v1", "admin", "users", "3", "unblock"] }
+          }
+        },
+        {
+          "name": "PATCH /admin/users/2/role → admin",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "const body = pm.response.json();",
+                "pm.test('Status 200', () => pm.expect(pm.response.code).to.eql(200));",
+                "pm.test('Role updated', () => {",
+                "  pm.expect(body).to.have.property('success', true);",
+                "  pm.expect(body).to.have.property('message', 'User role updated successfully');",
+                "  pm.expect(body.data).to.have.property('id', 2);",
+                "  pm.expect(body.data).to.have.property('role', 'admin');",
+                "  pm.expect(body.data).to.not.have.property('password');",
+                "});"
+              ],
+              "type": "text/javascript"
+            }
+          }],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{adminAccessToken}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"role\": \"admin\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/v1/admin/users/2/role", "host": ["{{baseUrl}}"], "path": ["api", "v1", "admin", "users", "2", "role"] }
+          }
+        },
+        {
+          "name": "PATCH /admin/users/2/role — Invalid role (422)",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "const body = pm.response.json();",
+                "pm.test('Status 422', () => pm.expect(pm.response.code).to.eql(422));",
+                "pm.test('Validation error format', () => {",
+                "  pm.expect(body).to.have.property('success', false);",
+                "  pm.expect(body).to.have.property('message', 'Validation failed');",
+                "  pm.expect(body.errors).to.be.an('array');",
+                "  pm.expect(body.errors.length).to.be.greaterThan(0);",
+                "  pm.expect(body.errors[0]).to.have.all.keys('field', 'message');",
+                "});"
+              ],
+              "type": "text/javascript"
+            }
+          }],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{adminAccessToken}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"role\": \"invalid_role_xyz\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/v1/admin/users/2/role", "host": ["{{baseUrl}}"], "path": ["api", "v1", "admin", "users", "2", "role"] }
+          }
+        },
+        {
+          "name": "PATCH /admin/users/999/block — Not found (404)",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "const body = pm.response.json();",
+                "pm.test('Status 404', () => pm.expect(pm.response.code).to.eql(404));",
+                "pm.test('Not found error', () => {",
+                "  pm.expect(body).to.have.property('success', false);",
+                "  pm.expect(body.message).to.include('not found');",
+                "});"
+              ],
+              "type": "text/javascript"
+            }
+          }],
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminAccessToken}}" }],
+            "url": { "raw": "{{baseUrl}}/api/v1/admin/users/999/block", "host": ["{{baseUrl}}"], "path": ["api", "v1", "admin", "users", "999", "block"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "⚠️ 5. Validation & Security Edge Cases",
+      "item": [
+        {
+          "name": "POST /auth/register — Weak password (422)",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "const body = pm.response.json();",
+                "pm.test('Status 422', () => pm.expect(pm.response.code).to.eql(422));",
+                "pm.test('Validation error format', () => {",
+                "  pm.expect(body).to.have.property('success', false);",
+                "  pm.expect(body).to.have.property('message', 'Validation failed');",
+                "  pm.expect(body.errors).to.be.an('array');",
+                "  pm.expect(body.errors.length).to.be.greaterThan(0);",
+                "});",
+                "pm.test('Each error has field + message', () => {",
+                "  body.errors.forEach(err => {",
+                "    pm.expect(err).to.have.all.keys('field', 'message');",
+                "  });",
+                "});",
+                "pm.test('Password error mentions requirement', () => {",
+                "  const pwdErr = body.errors.find(e => e.field === 'password');",
+                "  pm.expect(pwdErr).to.exist;",
+                "  pm.expect(pwdErr.message).to.match(/uppercase|number|strong|8/i);",
+                "});"
+              ],
+              "type": "text/javascript"
+            }
+          }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Weak Password Test\",\n  \"email\": \"weak.test@ozmo.io\",\n  \"password\": \"short1A\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/v1/auth/register", "host": ["{{baseUrl}}"], "path": ["api", "v1", "auth", "register"] }
+          }
+        },
+        {
+          "name": "POST /auth/login — Invalid email (422)",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "const body = pm.response.json();",
+                "pm.test('Status 422', () => pm.expect(pm.response.code).to.eql(422));",
+                "pm.test('Email validation error', () => {",
+                "  pm.expect(body).to.have.property('success', false);",
+                "  pm.expect(body).to.have.property('message', 'Validation failed');",
+                "  const emailErr = body.errors.find(e => e.field === 'email');",
+                "  pm.expect(emailErr).to.exist;",
+                "});"
+              ],
+              "type": "text/javascript"
+            }
+          }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"not-an-email\",\n  \"password\": \"Password@123\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/v1/auth/login", "host": ["{{baseUrl}}"], "path": ["api", "v1", "auth", "login"] }
+          }
+        },
+        {
+          "name": "POST /auth/login — Empty body (422)",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "const body = pm.response.json();",
+                "pm.test('Status 422', () => pm.expect(pm.response.code).to.eql(422));",
+                "pm.test('Multiple validation errors', () => {",
+                "  pm.expect(body.errors.length).to.be.greaterThan(1);",
+                "});"
+              ],
+              "type": "text/javascript"
+            }
+          }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{}" },
+            "url": { "raw": "{{baseUrl}}/api/v1/auth/login", "host": ["{{baseUrl}}"], "path": ["api", "v1", "auth", "login"] }
+          }
+        },
+        {
+          "name": "POST /auth/login — SQLi attempt (422)",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "const body = pm.response.json();",
+                "pm.test('Status 422 (validated, not 500)', () => pm.expect(pm.response.code).to.eql(422));",
+                "pm.test('No SQL error leakage', () => {",
+                "  pm.expect(body).to.have.property('success', false);",
+                "  pm.expect(body).to.have.property('message', 'Validation failed');",
+                "  pm.expect(body.message).to.not.include('SQL');",
+                "  pm.expect(body.message).to.not.include('syntax');",
+                "  pm.expect(body.message).to.not.include('error');",
+                "});",
+                "pm.test('Email validation error', () => {",
+                "  const emailErr = body.errors.find(e => e.field === 'email');",
+                "  pm.expect(emailErr).to.exist;",
+                "  pm.expect(emailErr.message).to.include('valid email');",
+                "});"
+              ],
+              "type": "text/javascript"
+            }
+          }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"' OR 1=1 --\",\n  \"password\": \"' OR '1'='1\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/v1/auth/login", "host": ["{{baseUrl}}"], "path": ["api", "v1", "auth", "login"] }
+          }
+        },
+        {
+          "name": "POST /auth/login — XSS attempt (422)",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "const body = pm.response.json();",
+                "pm.test('Status 422 (validated, not 500)', () => {",
+                "  pm.expect(pm.response.code).to.eql(422);",
+                "});",
+                "pm.test('No XSS reflection', () => {",
+                "  const json = JSON.stringify(body);",
+                "  pm.expect(json).to.not.include('<script>');",
+                "  pm.expect(json).to.not.include('alert');",
+                "});"
+              ],
+              "type": "text/javascript"
+            }
+          }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"<script>alert(1)</script>@xss.com\",\n  \"password\": \"<script>alert('pwd')</script>\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/v1/auth/login", "host": ["{{baseUrl}}"], "path": ["api", "v1", "auth", "login"] }
+          }
+        },
+        {
+          "name": "POST /auth/register — Weak password no uppercase (422)",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "const body = pm.response.json();",
+                "pm.test('Status 422', () => pm.expect(pm.response.code).to.eql(422));",
+                "pm.test('Password uppercase validation', () => {",
+                "  const pwdErr = body.errors.find(e => e.field === 'password');",
+                "  pm.expect(pwdErr).to.exist;",
+                "  pm.expect(pwdErr.message).to.include('uppercase');",
+                "});"
+              ],
+              "type": "text/javascript"
+            }
+          }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Weak Pwd Test\",\n  \"email\": \"weak.pwd@ozmo.io\",\n  \"password\": \"lowercaseonly1\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/v1/auth/register", "host": ["{{baseUrl}}"], "path": ["api", "v1", "auth", "register"] }
+          }
+        },
+        {
+          "name": "POST /auth/login — Blocked user (403)",
+          "event": [{
+            "listen": "test",
+            "script": {
+              "exec": [
+                "const body = pm.response.json();",
+                "pm.test('Status 403', () => pm.expect(pm.response.code).to.eql(403));",
+                "pm.test('Blocked user rejected', () => {",
+                "  pm.expect(body).to.have.property('success', false);",
+                "  pm.expect(body.message).to.include('blocked');",
+                "});"
+              ],
+              "type": "text/javascript"
+            }
+          }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"blocked@example.com\",\n  \"password\": \"blocked123\"\n}" },
+            "url": { "raw": "{{baseUrl}}/api/v1/auth/login", "host": ["{{baseUrl}}"], "path": ["api", "v1", "auth", "login"] }
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,75 @@
+{
+  "name": "Ozmo Sync API - Test",
+  "values": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:4000",
+      "type": "default"
+    },
+    {
+      "key": "testEmail",
+      "value": "test.user.new@ozmo.io",
+      "type": "default"
+    },
+    {
+      "key": "testName",
+      "value": "Test User",
+      "type": "default"
+    },
+    {
+      "key": "testPassword",
+      "value": "Secure@789",
+      "type": "default"
+    },
+    {
+      "key": "adminEmail",
+      "value": "alice@ozmo.io",
+      "type": "default"
+    },
+    {
+      "key": "adminPassword",
+      "value": "Password@123",
+      "type": "default"
+    },
+    {
+      "key": "userEmail",
+      "value": "bob@ozmo.io",
+      "type": "default"
+    },
+    {
+      "key": "userPassword",
+      "value": "Password@123",
+      "type": "default"
+    },
+    {
+      "key": "blockedEmail",
+      "value": "blocked@example.com",
+      "type": "default"
+    },
+    {
+      "key": "blockedPassword",
+      "value": "blocked123",
+      "type": "default"
+    },
+    {
+      "key": "superAdminEmail",
+      "value": "super@example.com",
+      "type": "default"
+    },
+    {
+      "key": "superAdminPassword",
+      "value": "super123",
+      "type": "default"
+    },
+    {
+      "key": "targetUserId",
+      "value": "2",
+      "type": "default"
+    },
+    {
+      "key": "blockedUserId",
+      "value": "4",
+      "type": "default"
+    }
+  ]
+}

@@ -20,7 +20,20 @@ Thumbs.db
 # Logs
 *.log
 logs/
+server.log
+
+# Test reports
+reports/
+
+# Scripts
+scripts/
+
+# Postman (keep collection, ignore local data)
+postman/*.postman_globals.json
+postman/*.postman_prerequest.json
 
 # Coverage
 coverage/
+# Windows
 nul
+Thumbs.db
