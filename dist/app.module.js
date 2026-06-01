@@ -13,6 +13,12 @@ const auth_module_1 = require("./auth/auth.module");
 const profile_module_1 = require("./profile/profile.module");
 const attendance_module_1 = require("./attendance/attendance.module");
 const staff_module_1 = require("./staff/staff.module");
+const audit_module_1 = require("./audit/audit.module");
+const careers_module_1 = require("./careers/careers.module");
+const system_settings_module_1 = require("./system-settings/system-settings.module");
+const workspaces_module_1 = require("./workspaces/workspaces.module");
+const users_module_1 = require("./users/users.module");
+const reports_module_1 = require("./reports/reports.module");
 let AppModule = class AppModule {
 };
 exports.AppModule = AppModule;
@@ -24,6 +30,12 @@ exports.AppModule = AppModule = __decorate([
             profile_module_1.ProfileModule,
             attendance_module_1.AttendanceModule,
             staff_module_1.StaffModule,
+            audit_module_1.AuditModule,
+            careers_module_1.CareersModule,
+            system_settings_module_1.SystemSettingsModule,
+            workspaces_module_1.WorkspacesModule,
+            users_module_1.UsersModule,
+            reports_module_1.ReportsModule,
         ],
     })
 ], AppModule);

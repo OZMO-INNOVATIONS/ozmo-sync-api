@@ -20,6 +20,7 @@ exports.AttendanceModule = AttendanceModule = __decorate([
         imports: [auth_module_1.AuthModule],
         controllers: [attendance_controller_1.AttendanceController],
         providers: [attendance_service_1.AttendanceService, attendance_repository_1.AttendanceRepository],
+        exports: [attendance_repository_1.AttendanceRepository],
     })
 ], AttendanceModule);
 //# sourceMappingURL=attendance.module.js.map

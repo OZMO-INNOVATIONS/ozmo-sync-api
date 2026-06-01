@@ -8,5 +8,6 @@ import { AuthModule } from '../auth/auth.module';
   imports: [AuthModule],
   controllers: [AttendanceController],
   providers: [AttendanceService, AttendanceRepository],
+  exports: [AttendanceRepository],
 })
 export class AttendanceModule {}
