@@ -1,7 +1,5 @@
 import { ExceptionFilter, ArgumentsHost } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 export declare class HttpExceptionFilter implements ExceptionFilter {
-    private readonly configService;
-    constructor(configService: ConfigService);
+    private readonly logger;
     catch(exception: unknown, host: ArgumentsHost): void;
 }

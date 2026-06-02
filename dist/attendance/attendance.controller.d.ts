@@ -1,5 +1,6 @@
 import { AttendanceService } from './attendance.service';
 import { CheckInDto } from './dto/check-in.dto';
+import { CheckOutDto } from './dto/check-out.dto';
 import { AttendanceQueryDto } from './dto/attendance-query.dto';
 import { RequestUser } from '../common/interfaces/request-user.interface';
 export declare class AttendanceController {
@@ -9,7 +10,7 @@ export declare class AttendanceController {
         message: string;
         data: import("../repositories/attendance.repository").AttendanceRecord;
     };
-    checkOut(user: RequestUser): {
+    checkOut(user: RequestUser, dto: CheckOutDto): {
         message: string;
         data: {
             durationMinutes: number;

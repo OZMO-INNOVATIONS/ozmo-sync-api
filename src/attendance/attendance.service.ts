@@ -1,6 +1,7 @@
 import { Injectable, ConflictException, NotFoundException } from '@nestjs/common';
 import { AttendanceRepository } from '../repositories/attendance.repository';
 import { CheckInDto } from './dto/check-in.dto';
+import { CheckOutDto } from './dto/check-out.dto';
 import { AttendanceQueryDto } from './dto/attendance-query.dto';
 
 @Injectable()
@@ -21,7 +22,7 @@ export class AttendanceService {
     });
   }
 
-  checkOut(userId: string) {
+  checkOut(userId: string, dto: CheckOutDto) {
     const open = this.attendanceRepo.findOpenCheckIn(userId);
     if (!open) {
       throw new NotFoundException('No active check-in found');
@@ -32,7 +33,10 @@ export class AttendanceService {
       (new Date(checkOutTime).getTime() - new Date(open.checkInTime).getTime()) / 60000,
     );
 
-    const updated = this.attendanceRepo.updateById(open.id, { checkOutTime });
+    const updated = this.attendanceRepo.updateById(open.id, {
+      checkOutTime,
+      ...(dto.notes !== undefined && { notes: dto.notes }),
+    });
     return { ...updated, durationMinutes };
   }
 

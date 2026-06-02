@@ -1,11 +1,12 @@
 import { AttendanceRepository } from '../repositories/attendance.repository';
 import { CheckInDto } from './dto/check-in.dto';
+import { CheckOutDto } from './dto/check-out.dto';
 import { AttendanceQueryDto } from './dto/attendance-query.dto';
 export declare class AttendanceService {
     private readonly attendanceRepo;
     constructor(attendanceRepo: AttendanceRepository);
     checkIn(userId: string, dto: CheckInDto): import("../repositories/attendance.repository").AttendanceRecord;
-    checkOut(userId: string): {
+    checkOut(userId: string, dto: CheckOutDto): {
         durationMinutes: number;
         id?: string | undefined;
         userId?: string | undefined;

@@ -11,6 +11,7 @@ import {
 } from '@nestjs/common';
 import { AttendanceService } from './attendance.service';
 import { CheckInDto } from './dto/check-in.dto';
+import { CheckOutDto } from './dto/check-out.dto';
 import { AttendanceQueryDto } from './dto/attendance-query.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -35,8 +36,8 @@ export class AttendanceController {
   @Post('check-out')
   @HttpCode(HttpStatus.OK)
   @Roles(Role.STAFF, Role.TEAM_LEAD)
-  checkOut(@CurrentUser() user: RequestUser) {
-    const data = this.attendanceService.checkOut(user.id);
+  checkOut(@CurrentUser() user: RequestUser, @Body() dto: CheckOutDto) {
+    const data = this.attendanceService.checkOut(user.id, dto);
     return { message: 'Check-out recorded', data };
   }
 

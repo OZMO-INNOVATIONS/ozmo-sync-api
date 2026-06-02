@@ -1,25 +1,53 @@
 import 'reflect-metadata';
-import { NestFactory, Reflector } from '@nestjs/core';
-import { ValidationPipe, VersioningType } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+import { NestFactory } from '@nestjs/core';
+import { ValidationPipe, VersioningType, UnprocessableEntityException } from '@nestjs/common';
+import helmet from 'helmet';
+import * as morgan from 'morgan';
+import rateLimit from 'express-rate-limit';
 import { AppModule } from './app.module';
-import { ResponseInterceptor } from './common/interceptors/response.interceptor';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
+import { ResponseTransformInterceptor } from './common/interceptors/response-transform.interceptor';
+import { configuration } from './config/configuration';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  const configService = app.get(ConfigService);
+  const config = configuration();
 
-  const origins = configService
-    .get<string>('ALLOWED_ORIGINS', 'http://localhost:3000')
-    .split(',')
-    .map((o) => o.trim());
+  app.use(helmet());
+
+  if (config.nodeEnv === 'development') {
+    app.use(morgan('dev'));
+  }
 
   app.enableCors({
-    origin: origins,
+    origin: config.corsOrigin.split(',').map((o) => o.trim()),
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
     credentials: true,
   });
+
+  app.use(
+    rateLimit({
+      windowMs: config.rateLimit.global.windowMs,
+      max: config.rateLimit.global.max,
+      standardHeaders: true,
+      legacyHeaders: false,
+      message: { success: false, message: 'Too many requests — please try again later' },
+    }),
+  );
+
+  app.use(
+    '/api/v1/auth/login',
+    rateLimit({
+      windowMs: config.rateLimit.login.windowMs,
+      max: config.rateLimit.login.max,
+      standardHeaders: true,
+      legacyHeaders: false,
+      message: {
+        success: false,
+        message: 'Too many login attempts — please try again in 15 minutes',
+      },
+    }),
+  );
 
   app.setGlobalPrefix('api');
   app.enableVersioning({ type: VersioningType.URI, defaultVersion: '1' });
@@ -30,15 +58,15 @@ async function bootstrap() {
       forbidNonWhitelisted: true,
       transform: true,
       transformOptions: { enableImplicitConversion: true },
+      exceptionFactory: (errors) => new UnprocessableEntityException(errors),
     }),
   );
 
-  app.useGlobalInterceptors(new ResponseInterceptor());
-  app.useGlobalFilters(new HttpExceptionFilter(configService));
+  app.useGlobalInterceptors(new ResponseTransformInterceptor());
+  app.useGlobalFilters(new HttpExceptionFilter());
 
-  const port = configService.get<number>('PORT', 4000);
-  await app.listen(port);
-  console.log(`[OZMO SYNC] Running on http://localhost:${port}/api/v1`);
+  await app.listen(config.port);
+  console.log(`[OZMO SYNC] Running on http://localhost:${config.port}/api/v1`);
 }
 
 bootstrap();

@@ -28,14 +28,17 @@ let AttendanceService = class AttendanceService {
             notes: dto.notes,
         });
     }
-    checkOut(userId) {
+    checkOut(userId, dto) {
         const open = this.attendanceRepo.findOpenCheckIn(userId);
         if (!open) {
             throw new common_1.NotFoundException('No active check-in found');
         }
         const checkOutTime = new Date().toISOString();
         const durationMinutes = Math.round((new Date(checkOutTime).getTime() - new Date(open.checkInTime).getTime()) / 60000);
-        const updated = this.attendanceRepo.updateById(open.id, { checkOutTime });
+        const updated = this.attendanceRepo.updateById(open.id, {
+            checkOutTime,
+            ...(dto.notes !== undefined && { notes: dto.notes }),
+        });
         return { ...updated, durationMinutes };
     }
     getAttendance(userId, query) {

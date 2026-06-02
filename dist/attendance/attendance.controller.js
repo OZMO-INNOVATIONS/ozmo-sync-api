@@ -16,6 +16,7 @@ exports.AttendanceController = void 0;
 const common_1 = require("@nestjs/common");
 const attendance_service_1 = require("./attendance.service");
 const check_in_dto_1 = require("./dto/check-in.dto");
+const check_out_dto_1 = require("./dto/check-out.dto");
 const attendance_query_dto_1 = require("./dto/attendance-query.dto");
 const jwt_auth_guard_1 = require("../common/guards/jwt-auth.guard");
 const roles_guard_1 = require("../common/guards/roles.guard");
@@ -30,8 +31,8 @@ let AttendanceController = class AttendanceController {
         const data = this.attendanceService.checkIn(user.id, dto);
         return { message: 'Check-in recorded', data };
     }
-    checkOut(user) {
-        const data = this.attendanceService.checkOut(user.id);
+    checkOut(user, dto) {
+        const data = this.attendanceService.checkOut(user.id, dto);
         return { message: 'Check-out recorded', data };
     }
     getMyAttendance(user, query) {
@@ -63,8 +64,9 @@ __decorate([
     (0, common_1.HttpCode)(common_1.HttpStatus.OK),
     (0, roles_decorator_1.Roles)(roles_enum_1.Role.STAFF, roles_enum_1.Role.TEAM_LEAD),
     __param(0, (0, current_user_decorator_1.CurrentUser)()),
+    __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Object]),
+    __metadata("design:paramtypes", [Object, check_out_dto_1.CheckOutDto]),
     __metadata("design:returntype", void 0)
 ], AttendanceController.prototype, "checkOut", null);
 __decorate([

@@ -1,56 +1,88 @@
-import { ExceptionFilter, Catch, ArgumentsHost, HttpException, HttpStatus } from '@nestjs/common';
+import {
+  ExceptionFilter,
+  Catch,
+  ArgumentsHost,
+  HttpException,
+  HttpStatus,
+  Logger,
+} from '@nestjs/common';
 import { Request, Response } from 'express';
-import { ConfigService } from '@nestjs/config';
+import { configuration } from '../../config/configuration';
+
+const config = configuration();
+
+interface ValidationErrorDetail {
+  field: string;
+  message: string;
+}
 
 @Catch()
 export class HttpExceptionFilter implements ExceptionFilter {
-  constructor(private readonly configService: ConfigService) {}
+  private readonly logger = new Logger(HttpExceptionFilter.name);
 
   catch(exception: unknown, host: ArgumentsHost): void {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
     const request = ctx.getRequest<Request>();
+    const timestamp = new Date().toISOString();
 
-    let statusCode = HttpStatus.INTERNAL_SERVER_ERROR;
-    let message = 'Something went wrong';
-    let errors: unknown[] | undefined;
+    let status: number;
+    let message: string;
+    let errors: ValidationErrorDetail[] | undefined;
 
     if (exception instanceof HttpException) {
-      statusCode = exception.getStatus();
-      const exBody = exception.getResponse();
+      status = exception.getStatus();
+      const exceptionResponse = exception.getResponse();
 
-      if (typeof exBody === 'string') {
-        message = exBody;
-      } else if (typeof exBody === 'object' && exBody !== null) {
-        const body = exBody as Record<string, unknown>;
-        if (Array.isArray(body.message)) {
-          errors = body.message as string[];
-          message = 'Validation failed';
+      if (typeof exceptionResponse === 'string') {
+        message = exceptionResponse;
+      } else if (typeof exceptionResponse === 'object') {
+        const resp = exceptionResponse as Record<string, unknown>;
+
+        if (Array.isArray(resp.message)) {
+          const firstItem = resp.message[0];
+          if (
+            typeof firstItem === 'object' &&
+            firstItem !== null &&
+            'property' in (firstItem as Record<string, unknown>)
+          ) {
+            errors = resp.message.map((err: unknown) => {
+              const e = err as Record<string, unknown>;
+              const constraints = e.constraints as Record<string, string> | undefined;
+              const firstConstraint = constraints
+                ? Object.values(constraints)[0]
+                : 'Invalid value';
+              return { field: e.property as string, message: firstConstraint };
+            });
+            message = 'Validation failed';
+          } else {
+            message = (resp.message as string[]).join('; ');
+          }
         } else {
-          message = (body.message as string) || message;
+          message = (resp.message as string) || exception.message;
         }
+      } else {
+        message = exception.message;
       }
+    } else if (exception instanceof Error) {
+      status = HttpStatus.INTERNAL_SERVER_ERROR;
+      message =
+        config.nodeEnv === 'production' ? 'Something went wrong' : exception.message;
+    } else {
+      status = HttpStatus.INTERNAL_SERVER_ERROR;
+      message = 'Something went wrong';
     }
 
-    if (statusCode >= 500) {
-      console.error(`[ERROR] ${request.method} ${request.url} → ${statusCode}`, exception);
+    if (status >= 500) {
+      this.logger.error(
+        `[${request.method}] ${request.url} — ${status} ${message}`,
+        exception instanceof Error ? exception.stack : undefined,
+      );
     }
 
-    const body: Record<string, unknown> = {
-      success: false,
-      message,
-      timestamp: new Date().toISOString(),
-    };
-
+    const body: Record<string, unknown> = { success: false, message, timestamp };
     if (errors) body.errors = errors;
 
-    if (
-      this.configService.get('NODE_ENV') === 'development' &&
-      exception instanceof Error
-    ) {
-      body.stack = exception.stack;
-    }
-
-    response.status(statusCode).json(body);
+    response.status(status).json(body);
   }
 }

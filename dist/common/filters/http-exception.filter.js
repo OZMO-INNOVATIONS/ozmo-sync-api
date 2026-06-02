@@ -5,61 +5,79 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
     else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
     return c > 3 && r && Object.defineProperty(target, key, r), r;
 };
-var __metadata = (this && this.__metadata) || function (k, v) {
-    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
-};
+var HttpExceptionFilter_1;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.HttpExceptionFilter = void 0;
 const common_1 = require("@nestjs/common");
-const config_1 = require("@nestjs/config");
-let HttpExceptionFilter = class HttpExceptionFilter {
-    constructor(configService) {
-        this.configService = configService;
+const configuration_1 = require("../../config/configuration");
+const config = (0, configuration_1.configuration)();
+let HttpExceptionFilter = HttpExceptionFilter_1 = class HttpExceptionFilter {
+    constructor() {
+        this.logger = new common_1.Logger(HttpExceptionFilter_1.name);
     }
     catch(exception, host) {
         const ctx = host.switchToHttp();
         const response = ctx.getResponse();
         const request = ctx.getRequest();
-        let statusCode = common_1.HttpStatus.INTERNAL_SERVER_ERROR;
-        let message = 'Something went wrong';
+        const timestamp = new Date().toISOString();
+        let status;
+        let message;
         let errors;
         if (exception instanceof common_1.HttpException) {
-            statusCode = exception.getStatus();
-            const exBody = exception.getResponse();
-            if (typeof exBody === 'string') {
-                message = exBody;
+            status = exception.getStatus();
+            const exceptionResponse = exception.getResponse();
+            if (typeof exceptionResponse === 'string') {
+                message = exceptionResponse;
             }
-            else if (typeof exBody === 'object' && exBody !== null) {
-                const body = exBody;
-                if (Array.isArray(body.message)) {
-                    errors = body.message;
-                    message = 'Validation failed';
+            else if (typeof exceptionResponse === 'object') {
+                const resp = exceptionResponse;
+                if (Array.isArray(resp.message)) {
+                    const firstItem = resp.message[0];
+                    if (typeof firstItem === 'object' &&
+                        firstItem !== null &&
+                        'property' in firstItem) {
+                        errors = resp.message.map((err) => {
+                            const e = err;
+                            const constraints = e.constraints;
+                            const firstConstraint = constraints
+                                ? Object.values(constraints)[0]
+                                : 'Invalid value';
+                            return { field: e.property, message: firstConstraint };
+                        });
+                        message = 'Validation failed';
+                    }
+                    else {
+                        message = resp.message.join('; ');
+                    }
                 }
                 else {
-                    message = body.message || message;
+                    message = resp.message || exception.message;
                 }
             }
+            else {
+                message = exception.message;
+            }
         }
-        if (statusCode >= 500) {
-            console.error(`[ERROR] ${request.method} ${request.url} → ${statusCode}`, exception);
+        else if (exception instanceof Error) {
+            status = common_1.HttpStatus.INTERNAL_SERVER_ERROR;
+            message =
+                config.nodeEnv === 'production' ? 'Something went wrong' : exception.message;
         }
-        const body = {
-            success: false,
-            message,
-            timestamp: new Date().toISOString(),
-        };
+        else {
+            status = common_1.HttpStatus.INTERNAL_SERVER_ERROR;
+            message = 'Something went wrong';
+        }
+        if (status >= 500) {
+            this.logger.error(`[${request.method}] ${request.url} — ${status} ${message}`, exception instanceof Error ? exception.stack : undefined);
+        }
+        const body = { success: false, message, timestamp };
         if (errors)
             body.errors = errors;
-        if (this.configService.get('NODE_ENV') === 'development' &&
-            exception instanceof Error) {
-            body.stack = exception.stack;
-        }
-        response.status(statusCode).json(body);
+        response.status(status).json(body);
     }
 };
 exports.HttpExceptionFilter = HttpExceptionFilter;
-exports.HttpExceptionFilter = HttpExceptionFilter = __decorate([
-    (0, common_1.Catch)(),
-    __metadata("design:paramtypes", [config_1.ConfigService])
+exports.HttpExceptionFilter = HttpExceptionFilter = HttpExceptionFilter_1 = __decorate([
+    (0, common_1.Catch)()
 ], HttpExceptionFilter);
 //# sourceMappingURL=http-exception.filter.js.map
