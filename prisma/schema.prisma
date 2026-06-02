@@ -1,0 +1,93 @@
+// OZMO SYNC — Prisma Schema (Phase 3: PostgreSQL)
+// Run: npx prisma migrate dev --name init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ── Enums ─────────────────────────────────────────────────────────────────────
+
+enum Role {
+  SUPER_ADMIN
+  ADMIN
+  HR
+  MANAGER
+  TEAM_LEAD
+  STAFF
+  GUEST
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  RESIGNED
+  TERMINATED
+}
+
+// ── Models ────────────────────────────────────────────────────────────────────
+
+model User {
+  id           String     @id @default(uuid()) @db.Uuid
+  employeeId   String     @unique @map("employee_id") @db.VarChar(20)
+  firstName    String     @map("first_name") @db.VarChar(50)
+  lastName     String     @map("last_name") @db.VarChar(50)
+  email        String     @unique @db.VarChar(255)
+  password     String     @db.VarChar(255)
+  phone        String?    @db.VarChar(20)
+  role         Role       @default(STAFF)
+  designation  String?    @db.VarChar(100)
+  department   String?    @db.VarChar(100)
+  joiningDate  DateTime?  @map("joining_date") @db.Date
+  status       UserStatus @default(ACTIVE)
+  refreshToken String?    @map("refresh_token") @db.Text
+
+  staffProfile      StaffProfile?
+  attendanceRecords AttendanceRecord[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([email])
+  @@index([employeeId])
+  @@index([department])
+  @@index([role])
+  @@index([status])
+  @@map("users")
+}
+
+model StaffProfile {
+  id               String  @id @default(uuid()) @db.Uuid
+  userId           String  @unique @map("user_id") @db.Uuid
+  emergencyContact String? @map("emergency_contact") @db.VarChar(255)
+  address          String? @db.Text
+  bankAccount      String? @map("bank_account") @db.Text
+  skills           String[]
+  bio              String? @db.Text
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("staff_profiles")
+}
+
+model AttendanceRecord {
+  id           String    @id @default(uuid()) @db.Uuid
+  userId       String    @map("user_id") @db.Uuid
+  checkInTime  DateTime  @map("check_in_time") @db.Timestamptz
+  checkOutTime DateTime? @map("check_out_time") @db.Timestamptz
+  notes        String?   @db.Text
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([userId])
+  @@index([checkInTime(sort: Desc)])
+  @@index([userId, checkInTime(sort: Desc)])
+  @@map("attendance_records")
+}
