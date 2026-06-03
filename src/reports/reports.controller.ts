@@ -20,14 +20,14 @@ export class ReportsController {
   ) {}
 
   @Get('export')
-  exportData(
+  async exportData(
     @Query() query: ExportQueryDto,
     @CurrentUser() user: RequestUser,
     @Res() res: Response,
   ) {
-    const { content, filename, mimeType } = this.reportsService.export(query);
+    const { content, filename, mimeType } = await this.reportsService.export(query);
 
-    this.auditService.log({
+    await this.auditService.log({
       action: 'DATA_EXPORTED',
       entityType: query.module,
       actorId: user.id,

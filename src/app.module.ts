@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
+import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
 import { ProfileModule } from './profile/profile.module';
 import { AttendanceModule } from './attendance/attendance.module';
@@ -21,6 +22,7 @@ import { ResponseTransformInterceptor } from './common/interceptors/response-tra
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true, envFilePath: '.env' }),
+    PrismaModule,
     AuthModule,
     ProfileModule,
     AttendanceModule,

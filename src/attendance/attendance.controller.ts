@@ -28,43 +28,43 @@ export class AttendanceController {
   @Post('check-in')
   @HttpCode(HttpStatus.CREATED)
   @Roles(Role.STAFF, Role.TEAM_LEAD)
-  checkIn(@CurrentUser() user: RequestUser, @Body() dto: CheckInDto) {
-    const data = this.attendanceService.checkIn(user.id, dto);
+  async checkIn(@CurrentUser() user: RequestUser, @Body() dto: CheckInDto) {
+    const data = await this.attendanceService.checkIn(user.id, dto);
     return { message: 'Check-in recorded', data };
   }
 
   @Post('check-out')
   @HttpCode(HttpStatus.OK)
   @Roles(Role.STAFF, Role.TEAM_LEAD)
-  checkOut(@CurrentUser() user: RequestUser, @Body() dto: CheckOutDto) {
-    const data = this.attendanceService.checkOut(user.id, dto);
+  async checkOut(@CurrentUser() user: RequestUser, @Body() dto: CheckOutDto) {
+    const data = await this.attendanceService.checkOut(user.id, dto);
     return { message: 'Check-out recorded', data };
   }
 
   // Declare /my and /dashboard BEFORE /:userId to prevent route shadowing
   @Get('my')
-  getMyAttendance(
+  async getMyAttendance(
     @CurrentUser() user: RequestUser,
     @Query() query: AttendanceQueryDto,
   ) {
-    const data = this.attendanceService.getAttendance(user.id, query);
+    const data = await this.attendanceService.getAttendance(user.id, query);
     return { message: 'Attendance fetched', data };
   }
 
   @Get('dashboard')
   @Roles(Role.ADMIN, Role.HR, Role.MANAGER)
-  getDashboard(@Query() query: AttendanceQueryDto) {
-    const data = this.attendanceService.getDashboard(query);
+  async getDashboard(@Query() query: AttendanceQueryDto) {
+    const data = await this.attendanceService.getDashboard(query);
     return { message: 'Dashboard data fetched', data };
   }
 
   @Get(':userId')
   @Roles(Role.ADMIN, Role.HR, Role.MANAGER)
-  getUserAttendance(
+  async getUserAttendance(
     @Param('userId') userId: string,
     @Query() query: AttendanceQueryDto,
   ) {
-    const data = this.attendanceService.getAttendance(userId, query);
+    const data = await this.attendanceService.getAttendance(userId, query);
     return { message: 'Attendance fetched', data };
   }
 }

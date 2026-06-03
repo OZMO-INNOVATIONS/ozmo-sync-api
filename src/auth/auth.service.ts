@@ -24,14 +24,14 @@ export class AuthService {
   ) {}
 
   async register(dto: RegisterDto) {
-    const existing = this.userRepo.findByEmail(dto.email);
+    const existing = await this.userRepo.findByEmail(dto.email);
     if (existing) throw new ConflictException('Email already in use');
 
     const saltRounds = parseInt(this.configService.get<string>('BCRYPT_SALT_ROUNDS', '12'), 10);
     const hashedPassword = await bcrypt.hash(dto.password, saltRounds);
-    const employeeId = this._generateEmployeeId();
+    const employeeId = await this._generateEmployeeId();
 
-    const user = this.userRepo.create({
+    const user = await this.userRepo.create({
       firstName: dto.firstName,
       lastName: dto.lastName,
       email: dto.email,
@@ -55,8 +55,8 @@ export class AuthService {
     }
 
     const user = dto.email
-      ? this.userRepo.findByEmail(dto.email)
-      : this.userRepo.findByEmployeeId(dto.employeeId!);
+      ? await this.userRepo.findByEmail(dto.email)
+      : await this.userRepo.findByEmployeeId(dto.employeeId!);
 
     const isMatch = user ? await bcrypt.compare(dto.password, user.password) : false;
     if (!user || !isMatch) {
@@ -81,7 +81,7 @@ export class AuthService {
       throw new UnauthorizedException('Invalid or expired refresh token');
     }
 
-    const user = this.userRepo.findById(payload.sub);
+    const user = await this.userRepo.findById(payload.sub);
     if (!user?.refreshToken) {
       throw new UnauthorizedException('Refresh token not recognised — please log in again');
     }
@@ -96,7 +96,7 @@ export class AuthService {
   }
 
   async logout(userId: string): Promise<void> {
-    this.userRepo.saveRefreshToken(userId, null);
+    await this.userRepo.saveRefreshToken(userId, null);
   }
 
   private async _issueTokens(user: UserEntity) {
@@ -120,7 +120,7 @@ export class AuthService {
     );
 
     const hashedRefresh = await bcrypt.hash(refreshToken, 10);
-    this.userRepo.saveRefreshToken(user.id, hashedRefresh);
+    await this.userRepo.saveRefreshToken(user.id, hashedRefresh);
 
     return { accessToken, refreshToken };
   }
@@ -131,9 +131,9 @@ export class AuthService {
     return safe;
   }
 
-  private _generateEmployeeId(): string {
+  private async _generateEmployeeId(): Promise<string> {
     const year = new Date().getFullYear();
-    const count = this.userRepo.count() + 1;
+    const count = (await this.userRepo.count()) + 1;
     return `OZ-${year}-${String(count).padStart(4, '0')}`;
   }
 }

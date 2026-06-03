@@ -14,35 +14,35 @@ export class ProfileController {
   constructor(private readonly profileService: ProfileService) {}
 
   @Get('profile')
-  getOwnProfile(@CurrentUser() user: RequestUser) {
-    const data = this.profileService.getProfile(user.id);
+  async getOwnProfile(@CurrentUser() user: RequestUser) {
+    const data = await this.profileService.getProfile(user.id);
     return { message: 'Profile fetched successfully', data };
   }
 
   @Put('profile')
-  updateOwnProfile(@CurrentUser() user: RequestUser, @Body() dto: UpdateProfileDto) {
-    const data = this.profileService.updateProfile(user.id, dto);
+  async updateOwnProfile(@CurrentUser() user: RequestUser, @Body() dto: UpdateProfileDto) {
+    const data = await this.profileService.updateProfile(user.id, dto);
     return { message: 'Profile updated successfully', data };
   }
 
   @Get('users')
   @Roles(Role.ADMIN, Role.HR, Role.MANAGER)
-  listUsers() {
-    const data = this.profileService.listUsers();
+  async listUsers() {
+    const data = await this.profileService.listUsers();
     return { message: 'Users fetched successfully', data };
   }
 
   @Get('users/:id')
   @Roles(Role.ADMIN, Role.HR, Role.MANAGER)
-  getUserById(@Param('id') id: string) {
-    const data = this.profileService.getUserById(id);
+  async getUserById(@Param('id') id: string) {
+    const data = await this.profileService.getUserById(id);
     return { message: 'User fetched successfully', data };
   }
 
   @Delete('users/:id')
   @Roles(Role.ADMIN)
-  deleteUser(@Param('id') id: string, @CurrentUser() user: RequestUser) {
-    this.profileService.deleteUser(id, user.id);
+  async deleteUser(@Param('id') id: string, @CurrentUser() user: RequestUser) {
+    await this.profileService.deleteUser(id, user.id);
     return { message: 'User deleted successfully', data: {} };
   }
 }

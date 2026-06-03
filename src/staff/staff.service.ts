@@ -22,14 +22,14 @@ export class StaffService {
   ) {}
 
   async create(dto: CreateStaffDto) {
-    const existing = this.userRepo.findByEmail(dto.email);
+    const existing = await this.userRepo.findByEmail(dto.email);
     if (existing) throw new ConflictException('Email already in use');
 
     const saltRounds = parseInt(this.configService.get<string>('BCRYPT_SALT_ROUNDS', '12'), 10);
     const hashedPassword = await bcrypt.hash(dto.password, saltRounds);
-    const employeeId = this._generateEmployeeId();
+    const employeeId = await this._generateEmployeeId();
 
-    const user = this.userRepo.create({
+    const user = await this.userRepo.create({
       firstName: dto.firstName,
       lastName: dto.lastName,
       email: dto.email,
@@ -44,23 +44,24 @@ export class StaffService {
       refreshToken: null,
     });
 
-    this.profileRepo.create({ userId: user.id });
+    await this.profileRepo.create({ userId: user.id });
 
     return this._sanitize(user);
   }
 
-  findAll() {
-    return this.userRepo.findAll().map((u) => this._sanitize(u));
+  async findAll() {
+    const users = await this.userRepo.findAll();
+    return users.map((u) => this._sanitize(u));
   }
 
-  findById(id: string) {
-    const user = this.userRepo.findById(id);
+  async findById(id: string) {
+    const user = await this.userRepo.findById(id);
     if (!user) throw new NotFoundException('Staff member not found');
     return this._sanitize(user);
   }
 
   async update(id: string, dto: UpdateStaffDto) {
-    const existing = this.userRepo.findById(id);
+    const existing = await this.userRepo.findById(id);
     if (!existing) throw new NotFoundException('Staff member not found');
 
     const updates: Partial<typeof existing> = { ...dto } as any;
@@ -71,29 +72,33 @@ export class StaffService {
     }
 
     if (dto.email && dto.email !== existing.email) {
-      const emailTaken = this.userRepo.findByEmail(dto.email);
+      const emailTaken = await this.userRepo.findByEmail(dto.email);
       if (emailTaken) throw new ConflictException('Email already in use');
     }
 
-    const updated = this.userRepo.updateById(id, updates);
+    const updated = await this.userRepo.updateById(id, updates);
     return this._sanitize(updated!);
   }
 
-  delete(id: string, actorId: string): void {
+  async delete(id: string, actorId: string): Promise<void> {
     if (id === actorId) throw new ForbiddenException('Cannot delete your own account');
-    const deleted = this.userRepo.deleteById(id);
+    const deleted = await this.userRepo.deleteById(id);
     if (!deleted) throw new NotFoundException('Staff member not found');
-    this.profileRepo.deleteByUserId(id);
+    await this.profileRepo.deleteByUserId(id);
   }
 
-  search(query: string) {
-    return this.userRepo.search(query).map((u) => this._sanitize(u));
+  async search(query: string) {
+    const users = await this.userRepo.search(query);
+    return users.map((u) => this._sanitize(u));
   }
 
-  filter(dto: StaffFilterDto) {
-    return this.userRepo
-      .filter({ department: dto.department, status: dto.status, role: dto.role })
-      .map((u) => this._sanitize(u));
+  async filter(dto: StaffFilterDto) {
+    const users = await this.userRepo.filter({
+      department: dto.department,
+      status: dto.status,
+      role: dto.role,
+    });
+    return users.map((u) => this._sanitize(u));
   }
 
   private _sanitize(user: any) {
@@ -102,9 +107,9 @@ export class StaffService {
     return safe;
   }
 
-  private _generateEmployeeId(): string {
+  private async _generateEmployeeId(): Promise<string> {
     const year = new Date().getFullYear();
-    const count = this.userRepo.count() + 1;
+    const count = (await this.userRepo.count()) + 1;
     return `OZ-${year}-${String(count).padStart(4, '0')}`;
   }
 }

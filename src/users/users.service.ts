@@ -16,15 +16,15 @@ export class UsersService {
     private readonly userRepo: UserRepository,
   ) {}
 
-  getAttendanceStats(userId: string, query: AttendanceStatsQueryDto) {
-    const user = this.userRepo.findById(userId);
+  async getAttendanceStats(userId: string, query: AttendanceStatsQueryDto) {
+    const user = await this.userRepo.findById(userId);
     if (!user) throw new NotFoundException('User not found');
 
     const targetYear = query.year ?? new Date().getFullYear();
     const from = new Date(Date.UTC(targetYear, 0, 1));
     const to = new Date(Date.UTC(targetYear, 11, 31, 23, 59, 59, 999));
 
-    const records = this.attendanceRepo.findByUserIdInRange(userId, from, to);
+    const records = await this.attendanceRepo.findByUserIdInRange(userId, from, to);
 
     const currentMonth = new Date().getUTCMonth() + 1;
     const currentYear = new Date().getFullYear();
@@ -107,8 +107,8 @@ export class UsersService {
     };
   }
 
-  getActivity(userId: string, query: ActivityQueryDto) {
-    const user = this.userRepo.findById(userId);
+  async getActivity(userId: string, query: ActivityQueryDto) {
+    const user = await this.userRepo.findById(userId);
     if (!user) throw new NotFoundException('User not found');
 
     const allowedTypes = query.types
@@ -116,7 +116,7 @@ export class UsersService {
       : null;
 
     // Build activity items from attendance records
-    const allRecords = this.attendanceRepo.findByUserId(userId);
+    const allRecords = await this.attendanceRepo.findByUserId(userId);
     const activities: {
       id: string;
       type: string;

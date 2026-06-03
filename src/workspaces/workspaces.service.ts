@@ -18,18 +18,18 @@ export class WorkspacesService {
     private readonly auditService: AuditService,
   ) {}
 
-  listWorkspaces() {
-    return this.workspacesRepo.findAll();
+  async listWorkspaces() {
+    return await this.workspacesRepo.findAll();
   }
 
-  getWorkspace(id: string) {
-    const workspace = this.workspacesRepo.findById(id);
+  async getWorkspace(id: string) {
+    const workspace = await this.workspacesRepo.findById(id);
     if (!workspace) throw new NotFoundException('Workspace not found');
     return workspace;
   }
 
-  createWorkspace(dto: CreateWorkspaceDto, actor: RequestUser) {
-    const workspace = this.workspacesRepo.create({
+  async createWorkspace(dto: CreateWorkspaceDto, actor: RequestUser) {
+    const workspace = await this.workspacesRepo.create({
       name: dto.name,
       domain: dto.domain,
       plan: dto.plan,
@@ -38,7 +38,7 @@ export class WorkspacesService {
       adminEmail: dto.adminEmail,
     });
 
-    this.auditService.log({
+    await this.auditService.log({
       action: 'WORKSPACE_CREATED',
       entityType: 'WORKSPACE',
       entityId: workspace.id,
@@ -50,18 +50,18 @@ export class WorkspacesService {
     return workspace;
   }
 
-  updateWorkspace(id: string, dto: UpdateWorkspaceDto, actor: RequestUser) {
-    const existing = this.workspacesRepo.findById(id);
+  async updateWorkspace(id: string, dto: UpdateWorkspaceDto, actor: RequestUser) {
+    const existing = await this.workspacesRepo.findById(id);
     if (!existing) throw new NotFoundException('Workspace not found');
 
-    const updated = this.workspacesRepo.updateById(id, {
+    const updated = await this.workspacesRepo.updateById(id, {
       name: dto.name,
       domain: dto.domain,
       plan: dto.plan,
       adminEmail: dto.adminEmail,
     });
 
-    this.auditService.log({
+    await this.auditService.log({
       action: 'WORKSPACE_UPDATED',
       entityType: 'WORKSPACE',
       entityId: id,
@@ -73,20 +73,20 @@ export class WorkspacesService {
     return updated;
   }
 
-  suspendWorkspace(id: string, dto: SuspendWorkspaceDto, actor: RequestUser) {
-    const workspace = this.workspacesRepo.findById(id);
+  async suspendWorkspace(id: string, dto: SuspendWorkspaceDto, actor: RequestUser) {
+    const workspace = await this.workspacesRepo.findById(id);
     if (!workspace) throw new NotFoundException('Workspace not found');
     if (!workspace.isActive) {
       throw new ConflictException('Workspace is already suspended');
     }
 
-    const activeCount = this.workspacesRepo.countActive();
+    const activeCount = await this.workspacesRepo.countActive();
     if (activeCount <= 1) {
       throw new UnprocessableEntityException('Cannot suspend the last active workspace');
     }
 
     const now = new Date().toISOString();
-    const updated = this.workspacesRepo.updateById(id, {
+    const updated = await this.workspacesRepo.updateById(id, {
       isActive: false,
       suspendedAt: now,
       suspendedBy: actor.id,
@@ -94,7 +94,7 @@ export class WorkspacesService {
       unsuspendedAt: undefined,
     });
 
-    this.auditService.log({
+    await this.auditService.log({
       action: 'WORKSPACE_SUSPENDED',
       entityType: 'WORKSPACE',
       entityId: id,
@@ -114,15 +114,15 @@ export class WorkspacesService {
     };
   }
 
-  unsuspendWorkspace(id: string, dto: SuspendWorkspaceDto, actor: RequestUser) {
-    const workspace = this.workspacesRepo.findById(id);
+  async unsuspendWorkspace(id: string, dto: SuspendWorkspaceDto, actor: RequestUser) {
+    const workspace = await this.workspacesRepo.findById(id);
     if (!workspace) throw new NotFoundException('Workspace not found');
     if (workspace.isActive) {
       throw new ConflictException('Workspace is not suspended');
     }
 
     const now = new Date().toISOString();
-    const updated = this.workspacesRepo.updateById(id, {
+    const updated = await this.workspacesRepo.updateById(id, {
       isActive: true,
       unsuspendedAt: now,
       suspendedAt: undefined,
@@ -130,7 +130,7 @@ export class WorkspacesService {
       suspensionReason: undefined,
     });
 
-    this.auditService.log({
+    await this.auditService.log({
       action: 'WORKSPACE_UNSUSPENDED',
       entityType: 'WORKSPACE',
       entityId: id,

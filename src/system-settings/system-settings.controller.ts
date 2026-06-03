@@ -15,14 +15,14 @@ export class SystemSettingsController {
   constructor(private readonly settingsService: SystemSettingsService) {}
 
   @Get()
-  getSettings() {
-    const data = this.settingsService.getSettings();
+  async getSettings() {
+    const data = await this.settingsService.getSettings();
     return { message: 'System settings retrieved', data };
   }
 
   @Put()
-  updateSettings(@Body() dto: UpdateSettingsDto, @CurrentUser() user: RequestUser) {
-    const data = this.settingsService.updateSettings(dto, user);
+  async updateSettings(@Body() dto: UpdateSettingsDto, @CurrentUser() user: RequestUser) {
+    const data = await this.settingsService.updateSettings(dto, user);
     return { message: 'System settings updated successfully', data };
   }
 }

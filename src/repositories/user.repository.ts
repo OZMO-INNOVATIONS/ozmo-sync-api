@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { v4 as uuidv4 } from 'uuid';
+import { PrismaService } from '../prisma/prisma.service';
 import { Role, UserStatus } from '../common/constants/roles.enum';
 
 export interface UserEntity {
@@ -21,80 +21,134 @@ export interface UserEntity {
 
 @Injectable()
 export class UserRepository {
-  private readonly store = new Map<string, UserEntity>();
+  constructor(private readonly prisma: PrismaService) {}
 
-  findAll(): UserEntity[] {
-    return Array.from(this.store.values());
-  }
-
-  findById(id: string): UserEntity | null {
-    return this.store.get(id) ?? null;
-  }
-
-  findByEmail(email: string): UserEntity | null {
-    const normalized = email.toLowerCase();
-    for (const user of this.store.values()) {
-      if (user.email === normalized) return user;
-    }
-    return null;
-  }
-
-  findByEmployeeId(employeeId: string): UserEntity | null {
-    for (const user of this.store.values()) {
-      if (user.employeeId === employeeId) return user;
-    }
-    return null;
-  }
-
-  create(dto: Omit<UserEntity, 'id' | 'createdAt'>): UserEntity {
-    const entity: UserEntity = {
-      ...dto,
-      id: uuidv4(),
-      email: dto.email.toLowerCase(),
-      createdAt: new Date().toISOString(),
+  private mapToEntity(user: any): UserEntity {
+    return {
+      id: user.id,
+      employeeId: user.employeeId,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      email: user.email,
+      password: user.password,
+      phone: user.phone ?? undefined,
+      role: user.role as Role,
+      designation: user.designation ?? undefined,
+      department: user.department ?? undefined,
+      joiningDate: user.joiningDate ? user.joiningDate.toISOString().split('T')[0] : undefined,
+      status: user.status as UserStatus,
+      createdAt: user.createdAt.toISOString(),
+      refreshToken: user.refreshToken,
     };
-    this.store.set(entity.id, entity);
-    return entity;
   }
 
-  updateById(id: string, updates: Partial<UserEntity>): UserEntity | null {
-    const existing = this.store.get(id);
-    if (!existing) return null;
-    const updated = { ...existing, ...updates };
-    this.store.set(id, updated);
-    return updated;
+  async findAll(): Promise<UserEntity[]> {
+    const users = await this.prisma.user.findMany();
+    return users.map((u) => this.mapToEntity(u));
   }
 
-  saveRefreshToken(id: string, token: string | null): void {
-    this.updateById(id, { refreshToken: token });
+  async findById(id: string): Promise<UserEntity | null> {
+    const user = await this.prisma.user.findUnique({ where: { id } });
+    return user ? this.mapToEntity(user) : null;
   }
 
-  deleteById(id: string): boolean {
-    return this.store.delete(id);
+  async findByEmail(email: string): Promise<UserEntity | null> {
+    const normalized = email.toLowerCase();
+    const user = await this.prisma.user.findUnique({ where: { email: normalized } });
+    return user ? this.mapToEntity(user) : null;
   }
 
-  count(): number {
-    return this.store.size;
+  async findByEmployeeId(employeeId: string): Promise<UserEntity | null> {
+    const user = await this.prisma.user.findUnique({ where: { employeeId } });
+    return user ? this.mapToEntity(user) : null;
   }
 
-  search(query: string): UserEntity[] {
-    const q = query.toLowerCase();
-    return Array.from(this.store.values()).filter(
-      (u) =>
-        u.firstName.toLowerCase().includes(q) ||
-        u.lastName.toLowerCase().includes(q) ||
-        u.email.includes(q) ||
-        u.employeeId.toLowerCase().includes(q) ||
-        u.department?.toLowerCase().includes(q),
-    );
-  }
-
-  filter(criteria: { department?: string; status?: UserStatus; role?: Role }): UserEntity[] {
-    return Array.from(this.store.values()).filter((u) => {
-      if (criteria.department && u.department !== criteria.department) return false;
-      if (criteria.status && u.status !== criteria.status) return false;
-      if (criteria.role && u.role !== criteria.role) return false;
-      return true;
+  async create(dto: Omit<UserEntity, 'id' | 'createdAt'>): Promise<UserEntity> {
+    const user = await this.prisma.user.create({
+      data: {
+        employeeId: dto.employeeId,
+        firstName: dto.firstName,
+        lastName: dto.lastName,
+        email: dto.email.toLowerCase(),
+        password: dto.password,
+        phone: dto.phone,
+        role: dto.role,
+        designation: dto.designation,
+        department: dto.department,
+        joiningDate: dto.joiningDate ? new Date(dto.joiningDate) : null,
+        status: dto.status,
+        refreshToken: dto.refreshToken,
+      },
     });
+    return this.mapToEntity(user);
+  }
+
+  async updateById(id: string, updates: Partial<UserEntity>): Promise<UserEntity | null> {
+    try {
+      const data: any = { ...updates };
+      delete data.id;
+      delete data.createdAt;
+      if (updates.email) {
+        data.email = updates.email.toLowerCase();
+      }
+      if (updates.joiningDate !== undefined) {
+        data.joiningDate = updates.joiningDate ? new Date(updates.joiningDate) : null;
+      }
+      const user = await this.prisma.user.update({
+        where: { id },
+        data,
+      });
+      return this.mapToEntity(user);
+    } catch (e) {
+      console.error('Error in UserRepository.updateById:', e);
+      return null;
+    }
+  }
+
+  async saveRefreshToken(id: string, token: string | null): Promise<void> {
+    await this.prisma.user.update({
+      where: { id },
+      data: { refreshToken: token },
+    });
+  }
+
+  async deleteById(id: string): Promise<boolean> {
+    try {
+      await this.prisma.user.delete({ where: { id } });
+      return true;
+    } catch (e) {
+      console.error('Error in UserRepository.deleteById:', e);
+      return false;
+    }
+  }
+
+  async count(): Promise<number> {
+    return this.prisma.user.count();
+  }
+
+  async search(query: string): Promise<UserEntity[]> {
+    const q = query.toLowerCase();
+    const users = await this.prisma.user.findMany({
+      where: {
+        OR: [
+          { firstName: { contains: q, mode: 'insensitive' } },
+          { lastName: { contains: q, mode: 'insensitive' } },
+          { email: { contains: q, mode: 'insensitive' } },
+          { employeeId: { contains: q, mode: 'insensitive' } },
+          { department: { contains: q, mode: 'insensitive' } },
+        ],
+      },
+    });
+    return users.map((u) => this.mapToEntity(u));
+  }
+
+  async filter(criteria: { department?: string; status?: UserStatus; role?: Role }): Promise<UserEntity[]> {
+    const where: any = {};
+    if (criteria.department) where.department = criteria.department;
+    if (criteria.status) where.status = criteria.status;
+    if (criteria.role) where.role = criteria.role;
+
+    const users = await this.prisma.user.findMany({ where });
+    return users.map((u) => this.mapToEntity(u));
   }
 }

@@ -14,7 +14,7 @@ export class ReportsService {
     private readonly auditRepo: AuditRepository,
   ) {}
 
-  export(query: ExportQueryDto): { content: string; filename: string; mimeType: string } {
+  async export(query: ExportQueryDto): Promise<{ content: string; filename: string; mimeType: string }> {
     if (query.fromDate && query.toDate) {
       const from = new Date(query.fromDate);
       const to = new Date(query.toDate);
@@ -25,7 +25,7 @@ export class ReportsService {
       }
     }
 
-    const rows = this._gatherRows(query);
+    const rows = await this._gatherRows(query);
     const dateStamp = new Date().toISOString().slice(0, 10);
     const moduleName = query.module.toLowerCase();
 
@@ -63,7 +63,7 @@ export class ReportsService {
     };
   }
 
-  private _gatherRows(query: ExportQueryDto): Row[] {
+  private async _gatherRows(query: ExportQueryDto): Promise<Row[]> {
     const from = query.fromDate ? new Date(query.fromDate) : undefined;
     const to = query.toDate ? new Date(query.toDate) : undefined;
 
@@ -79,8 +79,8 @@ export class ReportsService {
     }
   }
 
-  private _employeeRows(department?: string, status?: string): Row[] {
-    let users = this.userRepo.findAll();
+  private async _employeeRows(department?: string, status?: string): Promise<Row[]> {
+    let users = await this.userRepo.findAll();
     if (department) users = users.filter((u) => u.department === department);
     if (status) users = users.filter((u) => u.status === status);
 
@@ -98,13 +98,13 @@ export class ReportsService {
     }));
   }
 
-  private _attendanceRows(from?: Date, to?: Date): Row[] {
-    const users = this.userRepo.findAll();
+  private async _attendanceRows(from?: Date, to?: Date): Promise<Row[]> {
+    const users = await this.userRepo.findAll();
     const userMap = new Map(users.map((u) => [u.id, u]));
 
     const effectiveFrom = from ?? new Date(0);
     const effectiveTo = to ?? new Date();
-    const records = this.attendanceRepo.findAllInRange(effectiveFrom, effectiveTo);
+    const records = await this.attendanceRepo.findAllInRange(effectiveFrom, effectiveTo);
 
     return records.map((r) => {
       const user = userMap.get(r.userId);
@@ -126,8 +126,8 @@ export class ReportsService {
     });
   }
 
-  private _auditRows(from?: Date, to?: Date): Row[] {
-    const { entries } = this.auditRepo.findAll({
+  private async _auditRows(from?: Date, to?: Date): Promise<Row[]> {
+    const { entries } = await this.auditRepo.findAll({
       from,
       to,
       limit: 10000,

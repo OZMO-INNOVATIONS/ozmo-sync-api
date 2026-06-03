@@ -17,12 +17,12 @@ export interface LogEntryOptions {
 export class AuditService {
   constructor(private readonly auditRepo: AuditRepository) {}
 
-  log(options: LogEntryOptions): AuditEntry {
-    return this.auditRepo.log(options);
+  async log(options: LogEntryOptions): Promise<AuditEntry> {
+    return await this.auditRepo.log(options);
   }
 
-  getLogs(query: AuditQueryDto) {
-    const { entries, total } = this.auditRepo.findAll({
+  async getLogs(query: AuditQueryDto) {
+    const { entries, total } = await this.auditRepo.findAll({
       action: query.action,
       entityType: query.entityType,
       actorId: query.actorId,
@@ -41,8 +41,8 @@ export class AuditService {
     };
   }
 
-  getEntityLog(entityId: string) {
-    const entries = this.auditRepo.findByEntityId(entityId);
+  async getEntityLog(entityId: string) {
+    const entries = await this.auditRepo.findByEntityId(entityId);
     return entries.map(this._format);
   }
 

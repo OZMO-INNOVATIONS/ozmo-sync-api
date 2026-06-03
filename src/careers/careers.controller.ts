@@ -35,8 +35,8 @@ export class CareersController {
   constructor(private readonly careersService: CareersService) {}
 
   @Get('jobs')
-  listJobs(@Query() query: QueryJobsDto) {
-    const data = this.careersService.listJobs(query);
+  async listJobs(@Query() query: QueryJobsDto) {
+    const data = await this.careersService.listJobs(query);
     return { message: 'Job listings retrieved', data };
   }
 
@@ -54,7 +54,7 @@ export class CareersController {
       },
     }),
   )
-  applyForJob(
+  async applyForJob(
     @Param('jobId') jobId: string,
     @Body() dto: ApplyJobDto,
     @UploadedFile() resume?: UploadedFileInfo,
@@ -64,7 +64,7 @@ export class CareersController {
       ? `uploads/resumes/${Date.now()}_${resume.originalname}`
       : undefined;
 
-    const data = this.careersService.applyForJob(jobId, dto, resumeUrl);
+    const data = await this.careersService.applyForJob(jobId, dto, resumeUrl);
     return { message: 'Application submitted successfully', data };
   }
 }

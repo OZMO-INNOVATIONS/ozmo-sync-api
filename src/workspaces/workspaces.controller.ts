@@ -27,55 +27,53 @@ export class WorkspacesController {
   constructor(private readonly workspacesService: WorkspacesService) {}
 
   @Get()
-  listWorkspaces() {
-    const data = this.workspacesService.listWorkspaces();
+  async listWorkspaces() {
+    const data = await this.workspacesService.listWorkspaces();
     return { message: 'Workspaces retrieved', data };
   }
 
   @Get(':id')
-  getWorkspace(@Param('id') id: string) {
-    const data = this.workspacesService.getWorkspace(id);
+  async getWorkspace(@Param('id') id: string) {
+    const data = await this.workspacesService.getWorkspace(id);
     return { message: 'Workspace retrieved', data };
   }
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  createWorkspace(@Body() dto: CreateWorkspaceDto, @CurrentUser() user: RequestUser) {
-    const data = this.workspacesService.createWorkspace(dto, user);
+  async createWorkspace(@Body() dto: CreateWorkspaceDto, @CurrentUser() user: RequestUser) {
+    const data = await this.workspacesService.createWorkspace(dto, user);
     return { message: 'Workspace created', data };
   }
 
   @Put(':id')
-  updateWorkspace(
+  async updateWorkspace(
     @Param('id') id: string,
     @Body() dto: UpdateWorkspaceDto,
     @CurrentUser() user: RequestUser,
   ) {
-    const data = this.workspacesService.updateWorkspace(id, dto, user);
+    const data = await this.workspacesService.updateWorkspace(id, dto, user);
     return { message: 'Workspace updated', data };
   }
 
-  // Static sub-routes must come before /:id to avoid shadowing — but NestJS
-  // resolves :id/suspend and :id/unsuspend correctly as they differ from bare :id.
   @Put(':id/suspend')
   @HttpCode(HttpStatus.OK)
-  suspendWorkspace(
+  async suspendWorkspace(
     @Param('id') id: string,
     @Body() dto: SuspendWorkspaceDto,
     @CurrentUser() user: RequestUser,
   ) {
-    const data = this.workspacesService.suspendWorkspace(id, dto, user);
+    const data = await this.workspacesService.suspendWorkspace(id, dto, user);
     return { message: 'Workspace suspended successfully', data };
   }
 
   @Put(':id/unsuspend')
   @HttpCode(HttpStatus.OK)
-  unsuspendWorkspace(
+  async unsuspendWorkspace(
     @Param('id') id: string,
     @Body() dto: SuspendWorkspaceDto,
     @CurrentUser() user: RequestUser,
   ) {
-    const data = this.workspacesService.unsuspendWorkspace(id, dto, user);
+    const data = await this.workspacesService.unsuspendWorkspace(id, dto, user);
     return { message: 'Workspace reinstated successfully', data };
   }
 }
