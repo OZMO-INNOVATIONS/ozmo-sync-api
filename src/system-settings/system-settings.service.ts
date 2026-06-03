@@ -11,14 +11,14 @@ export class SystemSettingsService {
     private readonly auditService: AuditService,
   ) {}
 
-  getSettings() {
-    return this.settingsRepo.get();
+  async getSettings() {
+    return await this.settingsRepo.get();
   }
 
-  updateSettings(dto: UpdateSettingsDto, actor: RequestUser) {
-    const current = this.settingsRepo.get();
+  async updateSettings(dto: UpdateSettingsDto, actor: RequestUser) {
+    const current = await this.settingsRepo.get();
 
-    const updated = this.settingsRepo.update(
+    const updated = await this.settingsRepo.update(
       {
         branding: dto.branding,
         modules: dto.modules,
@@ -31,7 +31,7 @@ export class SystemSettingsService {
     const disabledAudit =
       current.security.auditLogging === true && dto.security?.auditLogging === false;
 
-    this.auditService.log({
+    await this.auditService.log({
       action: 'SETTINGS_UPDATED',
       entityType: 'SYSTEM_SETTINGS',
       entityId: updated.id,

@@ -37,30 +37,30 @@ export class StaffController {
 
   @Get()
   @Roles(Role.ADMIN, Role.HR, Role.MANAGER)
-  listStaff() {
-    const data = this.staffService.findAll();
+  async listStaff() {
+    const data = await this.staffService.findAll();
     return { message: 'Staff list fetched', data };
   }
 
   // /search and /filter must be declared BEFORE /:id to avoid shadowing
   @Get('search')
   @Roles(Role.ADMIN, Role.HR, Role.MANAGER)
-  searchStaff(@Query() query: StaffSearchDto) {
-    const data = this.staffService.search(query.q);
+  async searchStaff(@Query() query: StaffSearchDto) {
+    const data = await this.staffService.search(query.q);
     return { message: 'Search results', data };
   }
 
   @Get('filter')
   @Roles(Role.ADMIN, Role.HR, Role.MANAGER)
-  filterStaff(@Query() dto: StaffFilterDto) {
-    const data = this.staffService.filter(dto);
+  async filterStaff(@Query() dto: StaffFilterDto) {
+    const data = await this.staffService.filter(dto);
     return { message: 'Filtered results', data };
   }
 
   @Get(':id')
   @Roles(Role.ADMIN, Role.HR, Role.MANAGER, Role.TEAM_LEAD)
-  getStaffById(@Param('id') id: string) {
-    const data = this.staffService.findById(id);
+  async getStaffById(@Param('id') id: string) {
+    const data = await this.staffService.findById(id);
     return { message: 'Staff member fetched', data };
   }
 
@@ -73,8 +73,8 @@ export class StaffController {
 
   @Delete(':id')
   @Roles(Role.ADMIN)
-  deleteStaff(@Param('id') id: string, @CurrentUser() actor: RequestUser) {
-    this.staffService.delete(id, actor.id);
+  async deleteStaff(@Param('id') id: string, @CurrentUser() actor: RequestUser) {
+    await this.staffService.delete(id, actor.id);
     return { message: 'Staff member deleted', data: {} };
   }
 }

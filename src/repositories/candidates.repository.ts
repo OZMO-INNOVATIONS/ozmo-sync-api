@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import { v4 as uuidv4 } from 'uuid';
+import { PrismaService } from '../prisma/prisma.service';
+import { CandidateStage as PrismaCandidateStage, CandidateSource as PrismaCandidateSource } from '@prisma/client';
 
 export type CandidateStage =
   | 'APPLIED'
@@ -34,40 +35,95 @@ export interface CandidateEntity {
 
 @Injectable()
 export class CandidatesRepository {
-  private readonly store = new Map<string, CandidateEntity>();
+  constructor(private readonly prisma: PrismaService) {}
 
-  create(dto: Omit<CandidateEntity, 'id' | 'createdAt'>): CandidateEntity {
-    const entity: CandidateEntity = {
-      ...dto,
-      id: uuidv4(),
-      createdAt: new Date().toISOString(),
+  private mapToEntity(cand: any): CandidateEntity {
+    return {
+      id: cand.id,
+      jobId: cand.jobId,
+      firstName: cand.firstName,
+      lastName: cand.lastName,
+      email: cand.email,
+      phone: cand.phone,
+      currentDesignation: cand.currentDesignation,
+      experienceYears: cand.experienceYears,
+      education: cand.education,
+      skills: cand.skills,
+      portfolioUrl: cand.portfolioUrl ?? undefined,
+      coverLetter: cand.coverLetter ?? undefined,
+      resumeUrl: cand.resumeUrl ?? undefined,
+      stage: cand.stage as CandidateStage,
+      hasPortalAccess: cand.hasPortalAccess,
+      source: cand.source as CandidateSource,
+      appliedAt: cand.appliedAt.toISOString(),
+      createdAt: cand.createdAt.toISOString(),
     };
-    this.store.set(entity.id, entity);
-    return entity;
   }
 
-  findById(id: string): CandidateEntity | null {
-    return this.store.get(id) ?? null;
+  async create(dto: Omit<CandidateEntity, 'id' | 'createdAt'>): Promise<CandidateEntity> {
+    const cand = await this.prisma.candidate.create({
+      data: {
+        jobId: dto.jobId,
+        firstName: dto.firstName,
+        lastName: dto.lastName,
+        email: dto.email,
+        phone: dto.phone,
+        currentDesignation: dto.currentDesignation,
+        experienceYears: dto.experienceYears,
+        education: dto.education,
+        skills: dto.skills ?? [],
+        portfolioUrl: dto.portfolioUrl,
+        coverLetter: dto.coverLetter,
+        resumeUrl: dto.resumeUrl,
+        stage: dto.stage as PrismaCandidateStage,
+        hasPortalAccess: dto.hasPortalAccess,
+        source: dto.source as PrismaCandidateSource,
+        appliedAt: dto.appliedAt ? new Date(dto.appliedAt) : new Date(),
+      },
+    });
+    return this.mapToEntity(cand);
   }
 
-  findByEmailAndJobId(email: string, jobId: string): CandidateEntity | null {
-    for (const c of this.store.values()) {
-      if (c.email.toLowerCase() === email.toLowerCase() && c.jobId === jobId) return c;
+  async findById(id: string): Promise<CandidateEntity | null> {
+    const cand = await this.prisma.candidate.findUnique({ where: { id } });
+    return cand ? this.mapToEntity(cand) : null;
+  }
+
+  async findByEmailAndJobId(email: string, jobId: string): Promise<CandidateEntity | null> {
+    const cand = await this.prisma.candidate.findFirst({
+      where: {
+        email: { equals: email, mode: 'insensitive' },
+        jobId,
+      },
+    });
+    return cand ? this.mapToEntity(cand) : null;
+  }
+
+  async findByJobId(jobId: string): Promise<CandidateEntity[]> {
+    const cands = await this.prisma.candidate.findMany({
+      where: { jobId },
+      orderBy: { appliedAt: 'desc' },
+    });
+    return cands.map((c) => this.mapToEntity(c));
+  }
+
+  async updateById(id: string, updates: Partial<CandidateEntity>): Promise<CandidateEntity | null> {
+    try {
+      const data: any = { ...updates };
+      delete data.id;
+      delete data.createdAt;
+      if (updates.appliedAt !== undefined) data.appliedAt = updates.appliedAt ? new Date(updates.appliedAt) : null;
+      if (updates.stage) data.stage = updates.stage as PrismaCandidateStage;
+      if (updates.source) data.source = updates.source as PrismaCandidateSource;
+
+      const cand = await this.prisma.candidate.update({
+        where: { id },
+        data,
+      });
+      return this.mapToEntity(cand);
+    } catch (e) {
+      console.error('Error in CandidatesRepository.updateById:', e);
+      return null;
     }
-    return null;
-  }
-
-  findByJobId(jobId: string): CandidateEntity[] {
-    return Array.from(this.store.values())
-      .filter((c) => c.jobId === jobId)
-      .sort((a, b) => b.appliedAt.localeCompare(a.appliedAt));
-  }
-
-  updateById(id: string, updates: Partial<CandidateEntity>): CandidateEntity | null {
-    const existing = this.store.get(id);
-    if (!existing) return null;
-    const updated = { ...existing, ...updates };
-    this.store.set(id, updated);
-    return updated;
   }
 }

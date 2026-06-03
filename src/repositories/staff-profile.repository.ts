@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { v4 as uuidv4 } from 'uuid';
+import { PrismaService } from '../prisma/prisma.service';
 
 export interface StaffProfileEntity {
   id: string;
@@ -13,34 +13,68 @@ export interface StaffProfileEntity {
 
 @Injectable()
 export class StaffProfileRepository {
-  private readonly store = new Map<string, StaffProfileEntity>();
+  constructor(private readonly prisma: PrismaService) {}
 
-  create(dto: Omit<StaffProfileEntity, 'id' | 'updatedAt'>): StaffProfileEntity {
-    const profile: StaffProfileEntity = {
-      ...dto,
-      id: uuidv4(),
-      updatedAt: new Date().toISOString(),
+  private mapToEntity(profile: any): StaffProfileEntity {
+    return {
+      id: profile.id,
+      userId: profile.userId,
+      emergencyContact: profile.emergencyContact ?? undefined,
+      address: profile.address ?? undefined,
+      skills: profile.skills,
+      bio: profile.bio ?? undefined,
+      updatedAt: profile.updatedAt.toISOString(),
     };
-    this.store.set(profile.userId, profile);
-    return profile;
   }
 
-  findByUserId(userId: string): StaffProfileEntity | null {
-    return this.store.get(userId) ?? null;
+  async create(dto: Omit<StaffProfileEntity, 'id' | 'updatedAt'>): Promise<StaffProfileEntity> {
+    const profile = await this.prisma.staffProfile.create({
+      data: {
+        userId: dto.userId,
+        emergencyContact: dto.emergencyContact,
+        address: dto.address,
+        skills: dto.skills ?? [],
+        bio: dto.bio,
+      },
+    });
+    return this.mapToEntity(profile);
   }
 
-  updateByUserId(
+  async findByUserId(userId: string): Promise<StaffProfileEntity | null> {
+    const profile = await this.prisma.staffProfile.findUnique({
+      where: { userId },
+    });
+    return profile ? this.mapToEntity(profile) : null;
+  }
+
+  async updateByUserId(
     userId: string,
     updates: Partial<StaffProfileEntity>,
-  ): StaffProfileEntity | null {
-    const existing = this.store.get(userId);
-    if (!existing) return null;
-    const updated = { ...existing, ...updates, updatedAt: new Date().toISOString() };
-    this.store.set(userId, updated);
-    return updated;
+  ): Promise<StaffProfileEntity | null> {
+    try {
+      const data: any = { ...updates };
+      delete data.id;
+      delete data.userId;
+      delete data.updatedAt;
+
+      const profile = await this.prisma.staffProfile.update({
+        where: { userId },
+        data,
+      });
+      return this.mapToEntity(profile);
+    } catch (e) {
+      console.error('Error in StaffProfileRepository.updateByUserId:', e);
+      return null;
+    }
   }
 
-  deleteByUserId(userId: string): boolean {
-    return this.store.delete(userId);
+  async deleteByUserId(userId: string): Promise<boolean> {
+    try {
+      await this.prisma.staffProfile.delete({ where: { userId } });
+      return true;
+    } catch (e) {
+      console.error('Error in StaffProfileRepository.deleteByUserId:', e);
+      return false;
+    }
   }
 }

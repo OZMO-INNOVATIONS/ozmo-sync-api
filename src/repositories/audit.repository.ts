@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import { v4 as uuidv4 } from 'uuid';
+import { PrismaService } from '../prisma/prisma.service';
+import { AuditAction as PrismaAuditAction } from '@prisma/client';
 
 export type AuditAction =
   | 'USER_CREATED'
@@ -44,46 +45,77 @@ export interface AuditQueryParams {
 
 @Injectable()
 export class AuditRepository {
-  private readonly store = new Map<string, AuditEntry>();
+  constructor(private readonly prisma: PrismaService) {}
 
-  log(entry: Omit<AuditEntry, 'id' | 'createdAt'>): AuditEntry {
-    const record: AuditEntry = {
-      ...entry,
-      id: uuidv4(),
-      createdAt: new Date().toISOString(),
+  private mapToEntity(entry: any): AuditEntry {
+    return {
+      id: entry.id,
+      action: entry.action as AuditAction,
+      entityType: entry.entityType,
+      entityId: entry.entityId ?? undefined,
+      actorId: entry.actorId ?? undefined,
+      actorName: entry.actorName ?? undefined,
+      ipAddress: entry.ipAddress ?? undefined,
+      workspaceId: entry.workspaceId ?? undefined,
+      detail: entry.detail ?? undefined,
+      createdAt: entry.createdAt.toISOString(),
     };
-    this.store.set(record.id, record);
-    return record;
   }
 
-  findAll(query: AuditQueryParams): { entries: AuditEntry[]; total: number } {
-    let entries = Array.from(this.store.values());
-
-    if (query.action) entries = entries.filter((e) => e.action === query.action);
-    if (query.entityType) entries = entries.filter((e) => e.entityType === query.entityType);
-    if (query.actorId) entries = entries.filter((e) => e.actorId === query.actorId);
-    if (query.workspaceId) entries = entries.filter((e) => e.workspaceId === query.workspaceId);
-    if (query.from) entries = entries.filter((e) => new Date(e.createdAt) >= query.from!);
-    if (query.to) entries = entries.filter((e) => new Date(e.createdAt) <= query.to!);
-
-    entries = entries.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-
-    const total = entries.length;
-    const limit = query.limit ?? 50;
-    const offset = query.offset ?? 0;
-
-    return { entries: entries.slice(offset, offset + limit), total };
+  async log(entry: Omit<AuditEntry, 'id' | 'createdAt'>): Promise<AuditEntry> {
+    const record = await this.prisma.auditEntry.create({
+      data: {
+        action: entry.action as PrismaAuditAction,
+        entityType: entry.entityType,
+        entityId: entry.entityId,
+        actorId: entry.actorId,
+        actorName: entry.actorName,
+        ipAddress: entry.ipAddress,
+        workspaceId: entry.workspaceId,
+        detail: entry.detail,
+      },
+    });
+    return this.mapToEntity(record);
   }
 
-  findByEntityId(entityId: string): AuditEntry[] {
-    return Array.from(this.store.values())
-      .filter((e) => e.entityId === entityId)
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  async findAll(query: AuditQueryParams): Promise<{ entries: AuditEntry[]; total: number }> {
+    const where: any = {};
+    if (query.action) where.action = query.action as PrismaAuditAction;
+    if (query.entityType) where.entityType = query.entityType;
+    if (query.actorId) where.actorId = query.actorId;
+    if (query.workspaceId) where.workspaceId = query.workspaceId;
+    if (query.from || query.to) {
+      where.createdAt = {};
+      if (query.from) where.createdAt.gte = query.from;
+      if (query.to) where.createdAt.lte = query.to;
+    }
+
+    const total = await this.prisma.auditEntry.count({ where });
+    const entries = await this.prisma.auditEntry.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      take: query.limit ?? 50,
+      skip: query.offset ?? 0,
+    });
+
+    return {
+      entries: entries.map((e) => this.mapToEntity(e)),
+      total,
+    };
   }
 
-  findAll_raw(): AuditEntry[] {
-    return Array.from(this.store.values()).sort((a, b) =>
-      b.createdAt.localeCompare(a.createdAt),
-    );
+  async findByEntityId(entityId: string): Promise<AuditEntry[]> {
+    const entries = await this.prisma.auditEntry.findMany({
+      where: { entityId },
+      orderBy: { createdAt: 'desc' },
+    });
+    return entries.map((e) => this.mapToEntity(e));
+  }
+
+  async findAll_raw(): Promise<AuditEntry[]> {
+    const entries = await this.prisma.auditEntry.findMany({
+      orderBy: { createdAt: 'desc' },
+    });
+    return entries.map((e) => this.mapToEntity(e));
   }
 }

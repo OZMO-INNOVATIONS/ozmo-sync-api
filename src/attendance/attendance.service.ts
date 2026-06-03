@@ -8,13 +8,13 @@ import { AttendanceQueryDto } from './dto/attendance-query.dto';
 export class AttendanceService {
   constructor(private readonly attendanceRepo: AttendanceRepository) {}
 
-  checkIn(userId: string, dto: CheckInDto) {
-    const open = this.attendanceRepo.findOpenCheckIn(userId);
+  async checkIn(userId: string, dto: CheckInDto) {
+    const open = await this.attendanceRepo.findOpenCheckIn(userId);
     if (open) {
       throw new ConflictException('Already checked in — please check out first');
     }
 
-    return this.attendanceRepo.create({
+    return await this.attendanceRepo.create({
       userId,
       checkInTime: dto.checkInTime ?? new Date().toISOString(),
       checkOutTime: null,
@@ -22,8 +22,8 @@ export class AttendanceService {
     });
   }
 
-  checkOut(userId: string, dto: CheckOutDto) {
-    const open = this.attendanceRepo.findOpenCheckIn(userId);
+  async checkOut(userId: string, dto: CheckOutDto) {
+    const open = await this.attendanceRepo.findOpenCheckIn(userId);
     if (!open) {
       throw new NotFoundException('No active check-in found');
     }
@@ -33,21 +33,21 @@ export class AttendanceService {
       (new Date(checkOutTime).getTime() - new Date(open.checkInTime).getTime()) / 60000,
     );
 
-    const updated = this.attendanceRepo.updateById(open.id, {
+    const updated = await this.attendanceRepo.updateById(open.id, {
       checkOutTime,
       ...(dto.notes !== undefined && { notes: dto.notes }),
     });
     return { ...updated, durationMinutes };
   }
 
-  getAttendance(userId: string, query: AttendanceQueryDto) {
+  async getAttendance(userId: string, query: AttendanceQueryDto) {
     const { from, to } = this._resolveRange(query);
-    return this.attendanceRepo.findByUserIdInRange(userId, from, to);
+    return await this.attendanceRepo.findByUserIdInRange(userId, from, to);
   }
 
-  getDashboard(query: AttendanceQueryDto) {
+  async getDashboard(query: AttendanceQueryDto) {
     const { from, to } = this._resolveRange(query);
-    const records = this.attendanceRepo.findAllInRange(from, to);
+    const records = await this.attendanceRepo.findAllInRange(from, to);
 
     const checkedIn = new Set(records.map((r) => r.userId));
     const completedSessions = records.filter((r) => r.checkOutTime !== null);

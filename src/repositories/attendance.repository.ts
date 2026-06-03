@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { v4 as uuidv4 } from 'uuid';
+import { PrismaService } from '../prisma/prisma.service';
 
 export interface AttendanceRecord {
   id: string;
@@ -12,54 +12,97 @@ export interface AttendanceRecord {
 
 @Injectable()
 export class AttendanceRepository {
-  private readonly store = new Map<string, AttendanceRecord>();
+  constructor(private readonly prisma: PrismaService) {}
 
-  create(dto: Omit<AttendanceRecord, 'id' | 'createdAt'>): AttendanceRecord {
-    const record: AttendanceRecord = {
-      ...dto,
-      id: uuidv4(),
-      createdAt: new Date().toISOString(),
+  private mapToEntity(record: any): AttendanceRecord {
+    return {
+      id: record.id,
+      userId: record.userId,
+      checkInTime: record.checkInTime.toISOString(),
+      checkOutTime: record.checkOutTime ? record.checkOutTime.toISOString() : null,
+      notes: record.notes ?? undefined,
+      createdAt: record.createdAt.toISOString(),
     };
-    this.store.set(record.id, record);
-    return record;
   }
 
-  findById(id: string): AttendanceRecord | null {
-    return this.store.get(id) ?? null;
+  async create(dto: Omit<AttendanceRecord, 'id' | 'createdAt'>): Promise<AttendanceRecord> {
+    const record = await this.prisma.attendanceRecord.create({
+      data: {
+        userId: dto.userId,
+        checkInTime: new Date(dto.checkInTime),
+        checkOutTime: dto.checkOutTime ? new Date(dto.checkOutTime) : null,
+        notes: dto.notes,
+      },
+    });
+    return this.mapToEntity(record);
   }
 
-  findOpenCheckIn(userId: string): AttendanceRecord | null {
-    for (const record of this.store.values()) {
-      if (record.userId === userId && record.checkOutTime === null) return record;
+  async findById(id: string): Promise<AttendanceRecord | null> {
+    const record = await this.prisma.attendanceRecord.findUnique({
+      where: { id },
+    });
+    return record ? this.mapToEntity(record) : null;
+  }
+
+  async findOpenCheckIn(userId: string): Promise<AttendanceRecord | null> {
+    const record = await this.prisma.attendanceRecord.findFirst({
+      where: {
+        userId,
+        checkOutTime: null,
+      },
+    });
+    return record ? this.mapToEntity(record) : null;
+  }
+
+  async updateById(id: string, updates: Partial<AttendanceRecord>): Promise<AttendanceRecord | null> {
+    try {
+      const data: any = {};
+      if (updates.checkInTime !== undefined) data.checkInTime = new Date(updates.checkInTime);
+      if (updates.checkOutTime !== undefined) data.checkOutTime = updates.checkOutTime ? new Date(updates.checkOutTime) : null;
+      if (updates.notes !== undefined) data.notes = updates.notes;
+
+      const record = await this.prisma.attendanceRecord.update({
+        where: { id },
+        data,
+      });
+      return this.mapToEntity(record);
+    } catch (e) {
+      console.error('Error in AttendanceRepository.updateById:', e);
+      return null;
     }
-    return null;
   }
 
-  updateById(id: string, updates: Partial<AttendanceRecord>): AttendanceRecord | null {
-    const existing = this.store.get(id);
-    if (!existing) return null;
-    const updated = { ...existing, ...updates };
-    this.store.set(id, updated);
-    return updated;
-  }
-
-  findByUserId(userId: string): AttendanceRecord[] {
-    return Array.from(this.store.values())
-      .filter((r) => r.userId === userId)
-      .sort((a, b) => b.checkInTime.localeCompare(a.checkInTime));
-  }
-
-  findByUserIdInRange(userId: string, from: Date, to: Date): AttendanceRecord[] {
-    return this.findByUserId(userId).filter((r) => {
-      const t = new Date(r.checkInTime);
-      return t >= from && t <= to;
+  async findByUserId(userId: string): Promise<AttendanceRecord[]> {
+    const records = await this.prisma.attendanceRecord.findMany({
+      where: { userId },
+      orderBy: { checkInTime: 'desc' },
     });
+    return records.map((r) => this.mapToEntity(r));
   }
 
-  findAllInRange(from: Date, to: Date): AttendanceRecord[] {
-    return Array.from(this.store.values()).filter((r) => {
-      const t = new Date(r.checkInTime);
-      return t >= from && t <= to;
+  async findByUserIdInRange(userId: string, from: Date, to: Date): Promise<AttendanceRecord[]> {
+    const records = await this.prisma.attendanceRecord.findMany({
+      where: {
+        userId,
+        checkInTime: {
+          gte: from,
+          lte: to,
+        },
+      },
+      orderBy: { checkInTime: 'desc' },
     });
+    return records.map((r) => this.mapToEntity(r));
+  }
+
+  async findAllInRange(from: Date, to: Date): Promise<AttendanceRecord[]> {
+    const records = await this.prisma.attendanceRecord.findMany({
+      where: {
+        checkInTime: {
+          gte: from,
+          lte: to,
+        },
+      },
+    });
+    return records.map((r) => this.mapToEntity(r));
   }
 }

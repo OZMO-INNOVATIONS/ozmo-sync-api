@@ -13,14 +13,14 @@ export class AuditController {
   constructor(private readonly auditService: AuditService) {}
 
   @Get()
-  getLogs(@Query() query: AuditQueryDto) {
-    const data = this.auditService.getLogs(query);
+  async getLogs(@Query() query: AuditQueryDto) {
+    const data = await this.auditService.getLogs(query);
     return { message: 'Audit logs retrieved', data };
   }
 
   @Get(':entityId')
-  getEntityLog(@Param('entityId') entityId: string) {
-    const data = this.auditService.getEntityLog(entityId);
+  async getEntityLog(@Param('entityId') entityId: string) {
+    const data = await this.auditService.getEntityLog(entityId);
     return { message: 'Entity audit log retrieved', data };
   }
 }

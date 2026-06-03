@@ -14,17 +14,17 @@ export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   @Get(':userId/attendance-stats')
-  getAttendanceStats(
+  async getAttendanceStats(
     @Param('userId') userId: string,
     @Query() query: AttendanceStatsQueryDto,
   ) {
-    const data = this.usersService.getAttendanceStats(userId, query);
+    const data = await this.usersService.getAttendanceStats(userId, query);
     return { message: 'Attendance stats retrieved', data };
   }
 
   @Get(':userId/activity')
-  getActivity(@Param('userId') userId: string, @Query() query: ActivityQueryDto) {
-    const data = this.usersService.getActivity(userId, query);
+  async getActivity(@Param('userId') userId: string, @Query() query: ActivityQueryDto) {
+    const data = await this.usersService.getActivity(userId, query);
     return { message: 'Activity log retrieved', data };
   }
 }

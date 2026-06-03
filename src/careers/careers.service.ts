@@ -16,8 +16,8 @@ export class CareersService {
     private readonly candidatesRepo: CandidatesRepository,
   ) {}
 
-  listJobs(query: QueryJobsDto) {
-    const { jobs, total } = this.jobsRepo.findOpen({
+  async listJobs(query: QueryJobsDto) {
+    const { jobs, total } = await this.jobsRepo.findOpen({
       search: query.search,
       department: query.department,
       employmentType: query.employmentType,
@@ -56,19 +56,19 @@ export class CareersService {
     };
   }
 
-  applyForJob(jobId: string, dto: ApplyJobDto, resumeUrl: string | undefined) {
-    const job = this.jobsRepo.findById(jobId);
+  async applyForJob(jobId: string, dto: ApplyJobDto, resumeUrl: string | undefined) {
+    const job = await this.jobsRepo.findById(jobId);
     if (!job) throw new NotFoundException('Job not found');
     if (job.status !== 'OPEN') {
       throw new UnprocessableEntityException('This job is no longer accepting applications');
     }
 
-    const existing = this.candidatesRepo.findByEmailAndJobId(dto.email, jobId);
+    const existing = await this.candidatesRepo.findByEmailAndJobId(dto.email, jobId);
     if (existing) {
       throw new ConflictException('You have already applied for this position');
     }
 
-    const candidate = this.candidatesRepo.create({
+    const candidate = await this.candidatesRepo.create({
       jobId,
       firstName: dto.firstName,
       lastName: dto.lastName,
@@ -90,7 +90,7 @@ export class CareersService {
       appliedAt: new Date().toISOString(),
     });
 
-    this.jobsRepo.incrementApplicantCount(jobId);
+    await this.jobsRepo.incrementApplicantCount(jobId);
 
     return {
       applicationId: candidate.id,
