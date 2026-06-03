@@ -1,4 +1,5 @@
 'use strict';
+require('reflect-metadata');
 
 let appPromise;
 
