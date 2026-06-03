@@ -13,7 +13,7 @@ import { UserRepository } from '../repositories/user.repository';
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (cfg: ConfigService) => ({
-        secret: cfg.get<string>('JWT_SECRET'),
+        secret: cfg.get<string>('JWT_SECRET') || 'dev-jwt-secret-key-do-not-use-in-production-123456789',
         signOptions: {
           expiresIn: cfg.get<string>('JWT_EXPIRES_IN', '15m'),
           algorithm: 'HS256',

@@ -75,7 +75,7 @@ export class AuthService {
     try {
       payload = jwt.verify(
         rawToken,
-        this.configService.get<string>('JWT_REFRESH_SECRET')!,
+        this.configService.get<string>('JWT_REFRESH_SECRET') || 'dev-jwt-refresh-secret-key-do-not-use-in-production-123456789',
       ) as { sub: string };
     } catch {
       throw new UnauthorizedException('Invalid or expired refresh token');
@@ -111,7 +111,7 @@ export class AuthService {
 
     const refreshToken = jwt.sign(
       { sub: user.id },
-      this.configService.get<string>('JWT_REFRESH_SECRET')!,
+      this.configService.get<string>('JWT_REFRESH_SECRET') || 'dev-jwt-refresh-secret-key-do-not-use-in-production-123456789',
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       {
         expiresIn: this.configService.get('JWT_REFRESH_EXPIRES', '7d') as any,
