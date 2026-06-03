@@ -1,0 +1,17 @@
+# environment secrets — NEVER commit
+.env
+.env.*
+!.env.example
+
+# build output
+dist/
+
+# dependencies
+node_modules/
+
+# OS
+.DS_Store
+
+# editor
+.vscode/
+.idea/
