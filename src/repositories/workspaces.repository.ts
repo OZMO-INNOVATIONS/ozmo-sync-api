@@ -23,7 +23,7 @@ export interface WorkspaceEntity {
 
 @Injectable()
 export class WorkspacesRepository {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) { }
 
   private mapToEntity(ws: any): WorkspaceEntity {
     return {
