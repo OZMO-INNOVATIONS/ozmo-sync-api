@@ -1,6 +1,3 @@
-// OZMO SYNC — Prisma Schema (Phase 3: PostgreSQL)
-// Run: npx prisma migrate dev --name init
-
 generator client {
   provider      = "prisma-client-js"
   binaryTargets = ["native", "rhel-openssl-3.0.x", "rhel-openssl-1.0.x"]
@@ -12,7 +9,168 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
-// ── Enums ─────────────────────────────────────────────────────────────────────
+model User {
+  id                String             @id @default(uuid()) @db.Uuid
+  employeeId        String             @unique @map("employee_id") @db.VarChar(20)
+  firstName         String             @map("first_name") @db.VarChar(50)
+  lastName          String             @map("last_name") @db.VarChar(50)
+  email             String             @unique @db.VarChar(255)
+  phone             String?            @db.VarChar(20)
+  designation       String?            @db.VarChar(100)
+  department        String?            @db.VarChar(100)
+  refreshToken      String?            @map("refresh_token")
+  createdAt         DateTime           @default(now()) @map("created_at")
+  updatedAt         DateTime           @updatedAt @map("updated_at")
+  joiningDate       DateTime?          @map("joining_date") @db.Date
+  password          String             @db.VarChar(255)
+  role              Role               @default(STAFF)
+  status            UserStatus         @default(ACTIVE)
+  attendanceRecords AttendanceRecord[]
+  staffProfile      StaffProfile?
+
+  @@index([email])
+  @@index([employeeId])
+  @@index([department])
+  @@index([role])
+  @@index([status])
+  @@map("users")
+}
+
+model StaffProfile {
+  id               String   @id @default(uuid()) @db.Uuid
+  userId           String   @unique @map("user_id") @db.Uuid
+  emergencyContact String?  @map("emergency_contact") @db.VarChar(255)
+  address          String?
+  bankAccount      String?  @map("bank_account")
+  skills           String[]
+  bio              String?
+  updatedAt        DateTime @updatedAt @map("updated_at")
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("staff_profiles")
+}
+
+model AttendanceRecord {
+  id           String    @id @default(uuid()) @db.Uuid
+  userId       String    @map("user_id") @db.Uuid
+  checkInTime  DateTime  @map("check_in_time") @db.Timestamptz(6)
+  checkOutTime DateTime? @map("check_out_time") @db.Timestamptz(6)
+  notes        String?
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([checkInTime(sort: Desc)])
+  @@index([userId, checkInTime(sort: Desc)])
+  @@map("attendance_records")
+}
+
+model Job {
+  id                 String          @id @default(uuid()) @db.Uuid
+  title              String          @db.VarChar(255)
+  department         String          @db.VarChar(100)
+  experienceLevel    ExperienceLevel @map("experience_level")
+  employmentType     EmploymentType  @map("employment_type")
+  description        String
+  requirements       String[]
+  skills             String[]
+  location           String          @db.VarChar(255)
+  salaryMin          Int?            @map("salary_min")
+  salaryMax          Int?            @map("salary_max")
+  currency           String          @default("USD") @db.VarChar(10)
+  vacancies          Int             @default(1)
+  status             JobStatus       @default(OPEN)
+  workspaceId        String          @map("workspace_id") @db.Uuid
+  workspaceName      String          @map("workspace_name") @db.VarChar(255)
+  hideSalaryPublicly Boolean         @default(false) @map("hide_salary_publicly")
+  applicantCount     Int             @default(0) @map("applicant_count")
+  closingDate        DateTime?       @map("closing_date") @db.Date
+  createdAt          DateTime        @default(now()) @map("created_at")
+  updatedAt          DateTime        @updatedAt @map("updated_at")
+  candidates         Candidate[]
+
+  @@index([status])
+  @@index([department])
+  @@map("jobs")
+}
+
+model Candidate {
+  id                 String          @id @default(uuid()) @db.Uuid
+  jobId              String          @map("job_id") @db.Uuid
+  firstName          String          @map("first_name") @db.VarChar(50)
+  lastName           String          @map("last_name") @db.VarChar(50)
+  email              String          @db.VarChar(255)
+  phone              String          @db.VarChar(50)
+  currentDesignation String          @map("current_designation") @db.VarChar(255)
+  experienceYears    Int             @map("experience_years")
+  education          String
+  skills             String[]
+  portfolioUrl       String?         @map("portfolio_url")
+  coverLetter        String?         @map("cover_letter")
+  resumeUrl          String?         @map("resume_url")
+  stage              CandidateStage  @default(APPLIED)
+  hasPortalAccess    Boolean         @default(false) @map("has_portal_access")
+  source             CandidateSource @default(CAREERS_PORTAL)
+  appliedAt          DateTime        @default(now()) @map("applied_at")
+  createdAt          DateTime        @default(now()) @map("created_at")
+  job                Job             @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([jobId])
+  @@index([email])
+  @@map("candidates")
+}
+
+model AuditEntry {
+  id          String      @id @default(uuid()) @db.Uuid
+  action      AuditAction
+  entityType  String      @map("entity_type") @db.VarChar(50)
+  entityId    String?     @map("entity_id") @db.Uuid
+  actorId     String?     @map("actor_id") @db.Uuid
+  actorName   String?     @map("actor_name") @db.VarChar(100)
+  ipAddress   String?     @map("ip_address") @db.VarChar(45)
+  workspaceId String?     @map("workspace_id") @db.Uuid
+  detail      String?
+  createdAt   DateTime    @default(now()) @map("created_at")
+
+  @@index([action])
+  @@index([entityType])
+  @@index([entityId])
+  @@index([actorId])
+  @@index([workspaceId])
+  @@map("audit_entries")
+}
+
+model Workspace {
+  id               String        @id @default(uuid()) @db.Uuid
+  name             String        @db.VarChar(255)
+  domain           String?       @db.VarChar(255)
+  plan             WorkspacePlan @default(FREE)
+  isActive         Boolean       @default(true) @map("is_active")
+  memberCount      Int           @default(0) @map("member_count")
+  adminEmail       String?       @map("admin_email") @db.VarChar(255)
+  logoUrl          String?       @map("logo_url")
+  suspendedAt      DateTime?     @map("suspended_at")
+  suspendedBy      String?       @map("suspended_by") @db.VarChar(255)
+  suspensionReason String?       @map("suspension_reason")
+  unsuspendedAt    DateTime?     @map("unsuspended_at")
+  createdAt        DateTime      @default(now()) @map("created_at")
+  updatedAt        DateTime      @updatedAt @map("updated_at")
+
+  @@map("workspaces")
+}
+
+model SystemSettings {
+  id            String   @id @default(uuid()) @db.Uuid
+  branding      Json
+  modules       Json
+  security      Json
+  notifications Json
+  updatedAt     DateTime @updatedAt @map("updated_at")
+  updatedBy     String?  @map("updated_by") @db.VarChar(255)
+
+  @@map("system_settings")
+}
 
 enum Role {
   SUPER_ADMIN
@@ -90,175 +248,4 @@ enum WorkspacePlan {
   STARTER
   PROFESSIONAL
   ENTERPRISE
-}
-
-// ── Models ────────────────────────────────────────────────────────────────────
-
-model User {
-  id           String     @id @default(uuid()) @db.Uuid
-  employeeId   String     @unique @map("employee_id") @db.VarChar(20)
-  firstName    String     @map("first_name") @db.VarChar(50)
-  lastName     String     @map("last_name") @db.VarChar(50)
-  email        String     @unique @db.VarChar(255)
-  password     String     @db.VarChar(255)
-  phone        String?    @db.VarChar(20)
-  role         Role       @default(STAFF)
-  designation  String?    @db.VarChar(100)
-  department   String?    @db.VarChar(100)
-  joiningDate  DateTime?  @map("joining_date") @db.Date
-  status       UserStatus @default(ACTIVE)
-  refreshToken String?    @map("refresh_token") @db.Text
-
-  staffProfile      StaffProfile?
-  attendanceRecords AttendanceRecord[]
-
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  @@index([email])
-  @@index([employeeId])
-  @@index([department])
-  @@index([role])
-  @@index([status])
-  @@map("users")
-}
-
-model StaffProfile {
-  id               String  @id @default(uuid()) @db.Uuid
-  userId           String  @unique @map("user_id") @db.Uuid
-  emergencyContact String? @map("emergency_contact") @db.VarChar(255)
-  address          String? @db.Text
-  bankAccount      String? @map("bank_account") @db.Text
-  skills           String[]
-  bio              String? @db.Text
-
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  @@map("staff_profiles")
-}
-
-model AttendanceRecord {
-  id           String    @id @default(uuid()) @db.Uuid
-  userId       String    @map("user_id") @db.Uuid
-  checkInTime  DateTime  @map("check_in_time") @db.Timestamptz
-  checkOutTime DateTime? @map("check_out_time") @db.Timestamptz
-  notes        String?   @db.Text
-
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  @@index([userId])
-  @@index([checkInTime(sort: Desc)])
-  @@index([userId, checkInTime(sort: Desc)])
-  @@map("attendance_records")
-}
-
-model Job {
-  id                 String          @id @default(uuid()) @db.Uuid
-  title              String          @db.VarChar(255)
-  department         String          @db.VarChar(100)
-  experienceLevel    ExperienceLevel @map("experience_level")
-  employmentType     EmploymentType  @map("employment_type")
-  description        String          @db.Text
-  requirements       String[]
-  skills             String[]
-  location           String          @db.VarChar(255)
-  salaryMin          Int?            @map("salary_min")
-  salaryMax          Int?            @map("salary_max")
-  currency           String          @default("USD") @db.VarChar(10)
-  vacancies          Int             @default(1)
-  status             JobStatus       @default(OPEN)
-  workspaceId        String          @map("workspace_id") @db.Uuid
-  workspaceName      String          @map("workspace_name") @db.VarChar(255)
-  hideSalaryPublicly Boolean         @default(false) @map("hide_salary_publicly")
-  applicantCount     Int             @default(0) @map("applicant_count")
-  closingDate        DateTime?       @map("closing_date") @db.Date
-  createdAt          DateTime        @default(now()) @map("created_at")
-  updatedAt          DateTime        @updatedAt @map("updated_at")
-
-  candidates         Candidate[]
-
-  @@index([status])
-  @@index([department])
-  @@map("jobs")
-}
-
-model Candidate {
-  id                 String          @id @default(uuid()) @db.Uuid
-  jobId              String          @map("job_id") @db.Uuid
-  firstName          String          @map("first_name") @db.VarChar(50)
-  lastName           String          @map("last_name") @db.VarChar(50)
-  email              String          @db.VarChar(255)
-  phone              String          @db.VarChar(50)
-  currentDesignation String          @map("current_designation") @db.VarChar(255)
-  experienceYears    Int             @map("experience_years")
-  education          String          @db.Text
-  skills             String[]
-  portfolioUrl       String?         @map("portfolio_url") @db.Text
-  coverLetter        String?         @map("cover_letter") @db.Text
-  resumeUrl          String?         @map("resume_url") @db.Text
-  stage              CandidateStage  @default(APPLIED)
-  hasPortalAccess    Boolean         @default(false) @map("has_portal_access")
-  source             CandidateSource @default(CAREERS_PORTAL)
-  appliedAt          DateTime        @default(now()) @map("applied_at")
-  createdAt          DateTime        @default(now()) @map("created_at")
-
-  job                Job             @relation(fields: [jobId], references: [id], onDelete: Cascade)
-
-  @@index([jobId])
-  @@index([email])
-  @@map("candidates")
-}
-
-model AuditEntry {
-  id          String      @id @default(uuid()) @db.Uuid
-  action      AuditAction
-  entityType  String      @map("entity_type") @db.VarChar(50)
-  entityId    String?     @map("entity_id") @db.Uuid
-  actorId     String?     @map("actor_id") @db.Uuid
-  actorName   String?     @map("actor_name") @db.VarChar(100)
-  ipAddress   String?     @map("ip_address") @db.VarChar(45)
-  workspaceId String?     @map("workspace_id") @db.Uuid
-  detail      String?     @db.Text
-  createdAt   DateTime    @default(now()) @map("created_at")
-
-  @@index([action])
-  @@index([entityType])
-  @@index([entityId])
-  @@index([actorId])
-  @@index([workspaceId])
-  @@map("audit_entries")
-}
-
-model Workspace {
-  id               String        @id @default(uuid()) @db.Uuid
-  name             String        @db.VarChar(255)
-  domain           String?       @db.VarChar(255)
-  plan             WorkspacePlan @default(FREE)
-  isActive         Boolean       @default(true) @map("is_active")
-  memberCount      Int           @default(0) @map("member_count")
-  adminEmail       String?       @map("admin_email") @db.VarChar(255)
-  logoUrl          String?       @map("logo_url") @db.Text
-  suspendedAt      DateTime?     @map("suspended_at")
-  suspendedBy      String?       @map("suspended_by") @db.VarChar(255)
-  suspensionReason String?       @map("suspension_reason") @db.Text
-  unsuspendedAt    DateTime?     @map("unsuspended_at")
-  createdAt        DateTime      @default(now()) @map("created_at")
-  updatedAt        DateTime      @updatedAt @map("updated_at")
-
-  @@map("workspaces")
-}
-
-model SystemSettings {
-  id            String   @id @default(uuid()) @db.Uuid
-  branding      Json
-  modules       Json
-  security      Json
-  notifications Json
-  updatedAt     DateTime @updatedAt @map("updated_at")
-  updatedBy     String?  @map("updated_by") @db.VarChar(255)
-
-  @@map("system_settings")
 }
