@@ -11,16 +11,19 @@ import * as bcrypt from 'bcryptjs';
 import * as jwt from 'jsonwebtoken';
 import { UserRepository, UserEntity } from '../repositories/user.repository';
 import { WorkspacesRepository } from '../repositories/workspaces.repository';
+import { InvitationRepository } from '../repositories/invitation.repository';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { Role, UserStatus } from '../common/constants/roles.enum';
 import { JwtPayload } from '../common/interfaces/jwt-payload.interface';
+import { InvitationStatus } from '@prisma/client';
 
 @Injectable()
 export class AuthService {
   constructor(
     private readonly userRepo: UserRepository,
     private readonly workspacesRepo: WorkspacesRepository,
+    private readonly invitationRepo: InvitationRepository,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
   ) {}
@@ -45,47 +48,92 @@ export class AuthService {
     const hashedPassword = await bcrypt.hash(dto.password, saltRounds);
     const employeeId = await this._generateEmployeeId();
 
-    // 1. Create the workspace first
-    const workspace = await this.workspacesRepo.create({
-      name: dto.workspaceName,
-      domain: undefined,
-      plan: 'FREE',
-      isActive: true,
-      memberCount: 1,
-      adminEmail: dto.email,
-      logoUrl: dto.logo,
+    let workspace: any;
+    let finalRole = dto.role ?? Role.ADMIN;
 
-      companyName: dto.companyName,
-      businessType: dto.businessType,
-      industryType: dto.industryType,
-      companySize: dto.companySize,
-      country: dto.country,
-      website: dto.website,
-      companyEmail: dto.companyEmail,
-      companyPhone: dto.companyPhone,
-      companyAddress: dto.companyAddress,
-      companyDescription: dto.companyDescription,
+    if (dto.token) {
+      // 1. Resolve and validate invitation
+      const invite = await this.invitationRepo.findByToken(dto.token);
+      if (!invite) {
+        throw new BadRequestException('Invalid invitation token');
+      }
 
-      attendanceMethod: dto.attendanceMethod,
-      defaultWorkingHours: dto.defaultWorkingHours,
-      weekendDays: dto.weekendDays ?? [],
-      leavePolicy: dto.leavePolicy,
+      if (invite.status !== InvitationStatus.PENDING) {
+        throw new BadRequestException(`Invitation is no longer active (status: ${invite.status})`);
+      }
 
-      pushNotifications: dto.notifications?.pushNotifications ?? true,
-      attendanceAlerts: dto.notifications?.attendanceAlerts ?? true,
-      leaveAlerts: dto.notifications?.leaveAlerts ?? true,
-      taskAlerts: dto.notifications?.taskAlerts ?? true,
-      birthdayAlerts: dto.notifications?.birthdayAlerts ?? true,
-    });
+      if (new Date(invite.expiresAt).getTime() < Date.now()) {
+        await this.invitationRepo.updateStatus(invite.id, InvitationStatus.EXPIRED);
+        throw new BadRequestException('Invitation has expired');
+      }
 
-    // 2. Create the admin user
+      if (dto.email.toLowerCase().trim() !== invite.email.toLowerCase().trim()) {
+        throw new BadRequestException('Email does not match the invitation email');
+      }
+
+      // Enforce the invited role
+      finalRole = invite.role as unknown as Role;
+
+      // Find and update the associated workspace
+      const foundWorkspace = await this.workspacesRepo.findById(invite.workspaceId);
+      if (!foundWorkspace) {
+        throw new NotFoundException('Associated workspace not found');
+      }
+
+      workspace = await this.workspacesRepo.updateById(foundWorkspace.id, {
+        memberCount: foundWorkspace.memberCount + 1,
+      });
+
+      // Consume the invitation
+      await this.invitationRepo.updateStatus(invite.id, InvitationStatus.ACCEPTED);
+    } else {
+      // If registering without token, they must provide workspace name
+      if (!dto.workspaceName) {
+        throw new BadRequestException('Workspace name is required when not registering with an invite token');
+      }
+
+      // Create new workspace
+      workspace = await this.workspacesRepo.create({
+        name: dto.workspaceName,
+        domain: undefined,
+        plan: 'FREE',
+        isActive: true,
+        memberCount: 1,
+        adminEmail: dto.email,
+        logoUrl: dto.logo,
+
+        companyName: dto.companyName,
+        businessType: dto.businessType,
+        industryType: dto.industryType,
+        companySize: dto.companySize,
+        country: dto.country,
+        website: dto.website,
+        companyEmail: dto.companyEmail,
+        companyPhone: dto.companyPhone,
+        companyAddress: dto.companyAddress,
+        companyDescription: dto.companyDescription,
+
+        attendanceMethod: dto.attendanceMethod,
+        defaultWorkingHours: dto.defaultWorkingHours,
+        weekendDays: dto.weekendDays ?? [],
+        leavePolicy: dto.leavePolicy,
+
+        pushNotifications: dto.notifications?.pushNotifications ?? true,
+        attendanceAlerts: dto.notifications?.attendanceAlerts ?? true,
+        leaveAlerts: dto.notifications?.leaveAlerts ?? true,
+        taskAlerts: dto.notifications?.taskAlerts ?? true,
+        birthdayAlerts: dto.notifications?.birthdayAlerts ?? true,
+      });
+    }
+
+    // 2. Create the user
     const user = await this.userRepo.create({
       firstName,
       lastName,
       email: dto.email,
       password: hashedPassword,
       phone: dto.phone,
-      role: dto.role ?? Role.ADMIN, // Default to ADMIN since they register a new workspace
+      role: finalRole,
       designation: dto.designation,
       department: dto.department,
       employeeId,

@@ -14,6 +14,7 @@ import { UsersModule } from './users/users.module';
 import { ReportsModule } from './reports/reports.module';
 import { HealthModule } from './modules/health/health.module';
 import { CommonModule } from './modules/common/common.module';
+import { InvitationsModule } from './invitations/invitations.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
@@ -35,6 +36,7 @@ import { ResponseTransformInterceptor } from './common/interceptors/response-tra
     ReportsModule,
     HealthModule,
     CommonModule,
+    InvitationsModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },

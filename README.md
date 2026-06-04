@@ -252,6 +252,9 @@ All responses share the same structure.
 | `PUT`    | `/staff/:id`                    | JWT + Roles | `ADMIN` `HR`                       |
 | `DELETE` | `/staff/:id`                    | JWT + Roles | `ADMIN`                            |
 | `GET`    | `/workspaces/my-workspace`      | JWT + Roles | `ADMIN` `SUPER_ADMIN`              |
+| `POST`   | `/invitations`                  | JWT + Roles | `ADMIN` `SUPER_ADMIN`              |
+| `GET`    | `/invitations`                  | JWT + Roles | `ADMIN` `SUPER_ADMIN`              |
+| `POST`   | `/invitations/:token/revoke`    | JWT + Roles | `ADMIN` `SUPER_ADMIN`              |
 
 ---
 
@@ -1104,6 +1107,122 @@ Retrieve the workspace details for the authenticated administrator, including as
 
 ```bash
 curl http://localhost:4000/api/v1/workspaces/my-workspace \
+  -H "Authorization: Bearer <ACCESS_TOKEN>"
+```
+
+---
+
+### Workspaces
+
+#### Send Invitation
+
+Invite a new member to join the workspace. Generates a unique registration token.
+
+**`POST /api/v1/invitations`** — Auth: Bearer token | Roles: `ADMIN`, `SUPER_ADMIN`
+
+##### Request Body
+
+| Field  | Type   | Required | Description                        |
+| ------ | ------ | :------: | ---------------------------------- |
+| `email` | string |   Yes    | Invitee email address.             |
+| `role`  | enum   |   Yes    | Assignable Role (e.g. `STAFF`, `HR`, `MANAGER`). |
+
+```json
+{
+  "email": "invitee@company.com",
+  "role": "HR"
+}
+```
+
+##### Response — `201 Created`
+
+```json
+{
+  "success": true,
+  "message": "Invitation sent successfully",
+  "data": {
+    "id": "e3617be3-fe44-4861-ad81-cfb01f652cb9",
+    "email": "invitee@company.com",
+    "role": "HR",
+    "token": "c3617be3-fe44-4861-ad81-cfb01f652cb9",
+    "status": "PENDING",
+    "workspaceId": "a2a03efe-5da3-4125-aade-3a0e9568f612",
+    "invitedById": "1572d211-145e-47e7-bd3f-57861092af4e",
+    "expiresAt": "2026-06-11T06:07:14.662Z",
+    "signupUrl": "http://localhost:3000/auth/register?token=c3617be3-fe44-4861-ad81-cfb01f652cb9"
+  },
+  "timestamp": "2026-06-04T06:07:16.970Z"
+}
+```
+
+```bash
+curl -X POST http://localhost:4000/api/v1/invitations \
+  -H "Authorization: Bearer <ACCESS_TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"invitee@company.com","role":"HR"}'
+```
+
+---
+
+#### List Invitations
+
+Retrieve all invitations sent from the admin's workspace.
+
+**`GET /api/v1/invitations`** — Auth: Bearer token | Roles: `ADMIN`, `SUPER_ADMIN`
+
+##### Response — `200 OK`
+
+```json
+{
+  "success": true,
+  "message": "Invitations retrieved successfully",
+  "data": [
+    {
+      "id": "e3617be3-fe44-4861-ad81-cfb01f652cb9",
+      "email": "invitee@company.com",
+      "role": "HR",
+      "token": "c3617be3-fe44-4861-ad81-cfb01f652cb9",
+      "status": "PENDING",
+      "workspaceId": "a2a03efe-5da3-4125-aade-3a0e9568f612",
+      "invitedById": "1572d211-145e-47e7-bd3f-57861092af4e",
+      "expiresAt": "2026-06-11T06:07:14.662Z",
+      "createdAt": "2026-06-04T06:07:14.662Z",
+      "updatedAt": "2026-06-04T06:07:14.662Z"
+    }
+  ],
+  "timestamp": "2026-06-04T06:07:16.970Z"
+}
+```
+
+```bash
+curl http://localhost:4000/api/v1/invitations \
+  -H "Authorization: Bearer <ACCESS_TOKEN>"
+```
+
+---
+
+#### Revoke Invitation
+
+Revoke an active pending invitation.
+
+**`POST /api/v1/invitations/:token/revoke`** — Auth: Bearer token | Roles: `ADMIN`, `SUPER_ADMIN`
+
+##### Response — `200 OK`
+
+```json
+{
+  "success": true,
+  "message": "Invitation revoked successfully",
+  "data": {
+    "id": "e3617be3-fe44-4861-ad81-cfb01f652cb9",
+    "status": "REVOKED"
+  },
+  "timestamp": "2026-06-04T06:07:16.970Z"
+}
+```
+
+```bash
+curl -X POST http://localhost:4000/api/v1/invitations/c3617be3-fe44-4861-ad81-cfb01f652cb9/revoke \
   -H "Authorization: Bearer <ACCESS_TOKEN>"
 ```
 

@@ -271,3 +271,29 @@ enum WorkspacePlan {
   PROFESSIONAL
   ENTERPRISE
 }
+
+model Invitation {
+  id          String           @id @default(uuid()) @db.Uuid
+  email       String           @db.VarChar(255)
+  role        Role
+  token       String           @unique @db.VarChar(255)
+  status      InvitationStatus @default(PENDING)
+  workspaceId String           @map("workspace_id") @db.Uuid
+  invitedById String           @map("invited_by_id") @db.Uuid
+  expiresAt   DateTime         @map("expires_at")
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+
+  @@index([email])
+  @@index([token])
+  @@index([workspaceId])
+  @@map("invitations")
+}
+
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  EXPIRED
+  REVOKED
+}
+

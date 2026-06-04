@@ -7,6 +7,7 @@ import { AuthService } from './auth.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { UserRepository } from '../repositories/user.repository';
 import { WorkspacesRepository } from '../repositories/workspaces.repository';
+import { InvitationRepository } from '../repositories/invitation.repository';
 
 @Module({
   imports: [
@@ -23,7 +24,13 @@ import { WorkspacesRepository } from '../repositories/workspaces.repository';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, UserRepository, WorkspacesRepository],
+  providers: [
+    AuthService,
+    JwtStrategy,
+    UserRepository,
+    WorkspacesRepository,
+    InvitationRepository,
+  ],
   exports: [UserRepository, PassportModule],
 })
 export class AuthModule {}

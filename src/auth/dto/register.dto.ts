@@ -84,11 +84,15 @@ export class RegisterDto {
   @IsString()
   department?: string;
 
-  // Workspace and Company fields
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
+  token?: string;
+
+  // Workspace and Company fields
+  @IsOptional()
+  @IsString()
   @MaxLength(100)
-  workspaceName: string;
+  workspaceName?: string;
 
   @IsOptional()
   @IsString()
