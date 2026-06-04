@@ -39,6 +39,8 @@ Enterprise-grade Staff Management & Attendance Tracking REST API built with **Ne
     - [Get Staff by ID](#get-staff-by-id)
     - [Update Staff](#update-staff)
     - [Delete Staff](#delete-staff)
+  - [Workspaces](#workspaces)
+    - [Get Workspace Details](#get-workspace-details)
 - [Error Responses](#error-responses)
 - [HTTP Status Codes](#http-status-codes)
 
@@ -249,6 +251,7 @@ All responses share the same structure.
 | `GET`    | `/staff/:id`                    | JWT + Roles | `ADMIN` `HR` `MANAGER` `TEAM_LEAD` |
 | `PUT`    | `/staff/:id`                    | JWT + Roles | `ADMIN` `HR`                       |
 | `DELETE` | `/staff/:id`                    | JWT + Roles | `ADMIN`                            |
+| `GET`    | `/workspaces/my-workspace`      | JWT + Roles | `ADMIN` `SUPER_ADMIN`              |
 
 ---
 
@@ -262,25 +265,64 @@ Create a new account and receive a token pair. `employeeId` is auto-generated in
 
 ##### Request Body
 
-| Field         | Type   | Required | Validation                                    |
+| Field | Type | Required | Validation / Description |
 | ------------- | ------ | :------: | --------------------------------------------- |
-| `firstName`   | string | Yes      | 2–50 characters                               |
-| `lastName`    | string | Yes      | 2–50 characters                               |
-| `email`       | string | Yes      | Valid email, normalized to lowercase          |
-| `password`    | string | Yes      | Min 8 chars, at least 1 uppercase, 1 digit    |
-| `phone`       | string | No       |                                               |
-| `role`        | enum   | No       | Role enum value (default: `STAFF`)            |
-| `designation` | string | No       |                                               |
-| `department`  | string | No       |                                               |
+| `fullName` | string | No | 2–100 characters. If provided, splits into firstName & lastName. |
+| `firstName` | string | No | 2–50 characters. |
+| `lastName` | string | No | 2–50 characters. |
+| `email` | string | Yes | Valid email, normalized to lowercase |
+| `password` | string | Yes | Min 8 chars, at least 1 uppercase, 1 digit |
+| `phone` | string | No | |
+| `role` | enum | No | Role enum value (default: `ADMIN`) |
+| `designation` | string | No | |
+| `department` | string | No | |
+| `workspaceName` | string | Yes | Max 100 characters. |
+| `companyName` | string | No | Max 255 characters. |
+| `logo` | string | No | Logo image URL. |
+| `businessType` | string | No | Max 100 characters. |
+| `industryType` | string | No | Max 100 characters. |
+| `companySize` | string | No | Max 50 characters. |
+| `country` | string | No | Max 100 characters. |
+| `website` | string | No | Max 255 characters. |
+| `companyEmail` | string | No | Valid email address. |
+| `companyPhone` | string | No | Max 50 characters. |
+| `companyAddress` | string | No | Street address. |
+| `companyDescription` | string | No | Business description. |
+| `attendanceMethod` | string | No | e.g. `RFID`, `BIOMETRIC`, `MOBILE`. |
+| `defaultWorkingHours` | string | No | e.g. `9:00 AM - 6:00 PM`. |
+| `weekendDays` | array | No | String array of weekend days. |
+| `leavePolicy` | string | No | Policy text. |
+| `notifications` | object | No | Object containing alert setting overrides: `pushNotifications`, `attendanceAlerts`, `leaveAlerts`, `taskAlerts`, `birthdayAlerts`. |
 
 ```json
 {
-  "firstName": "Jane",
-  "lastName": "Smith",
+  "fullName": "Jane Smith",
   "email": "jane.smith@ozmo.io",
   "password": "Secure@789",
-  "role": "STAFF",
-  "department": "Engineering"
+  "phone": "+1234567890",
+  "workspaceName": "Ozmo Engineering",
+  "companyName": "Ozmo Innovations Inc.",
+  "logo": "https://example.com/logo.png",
+  "businessType": "Software Service",
+  "industryType": "Technology",
+  "companySize": "10-49",
+  "country": "Singapore",
+  "website": "https://ozmo.io",
+  "companyEmail": "contact@ozmo.io",
+  "companyPhone": "+6512345678",
+  "companyAddress": "123 Technology Way",
+  "companyDescription": "Building Enterprise Workforce Software",
+  "attendanceMethod": "BIOMETRIC",
+  "defaultWorkingHours": "9:00 AM - 6:00 PM",
+  "weekendDays": ["Saturday", "Sunday"],
+  "leavePolicy": "14 days annual leave",
+  "notifications": {
+    "pushNotifications": true,
+    "attendanceAlerts": false,
+    "leaveAlerts": true,
+    "taskAlerts": false,
+    "birthdayAlerts": true
+  }
 }
 ```
 
@@ -299,10 +341,39 @@ Create a new account and receive a token pair. `employeeId` is auto-generated in
       "firstName": "Jane",
       "lastName": "Smith",
       "email": "jane.smith@ozmo.io",
-      "role": "STAFF",
-      "department": "Engineering",
+      "role": "ADMIN",
       "status": "ACTIVE",
       "createdAt": "2026-05-31T10:00:00.000Z"
+    },
+    "workspace": {
+      "id": "7b2e1a4b-...",
+      "name": "Ozmo Engineering",
+      "plan": "FREE",
+      "isActive": true,
+      "memberCount": 1,
+      "adminEmail": "jane.smith@ozmo.io",
+      "logoUrl": "https://example.com/logo.png",
+      "companyName": "Ozmo Innovations Inc.",
+      "businessType": "Software Service",
+      "industryType": "Technology",
+      "companySize": "10-49",
+      "country": "Singapore",
+      "website": "https://ozmo.io",
+      "companyEmail": "contact@ozmo.io",
+      "companyPhone": "+6512345678",
+      "companyAddress": "123 Technology Way",
+      "companyDescription": "Building Enterprise Workforce Software",
+      "attendanceMethod": "BIOMETRIC",
+      "defaultWorkingHours": "9:00 AM - 6:00 PM",
+      "weekendDays": ["Saturday", "Sunday"],
+      "leavePolicy": "14 days annual leave",
+      "pushNotifications": true,
+      "attendanceAlerts": false,
+      "leaveAlerts": true,
+      "taskAlerts": false,
+      "birthdayAlerts": true,
+      "createdAt": "2026-05-31T10:00:00.000Z",
+      "updatedAt": "2026-05-31T10:00:00.000Z"
     }
   },
   "timestamp": "2026-05-31T10:00:00.000Z"
@@ -313,12 +384,10 @@ Create a new account and receive a token pair. `employeeId` is auto-generated in
 curl -X POST http://localhost:4000/api/v1/auth/register \
   -H "Content-Type: application/json" \
   -d '{
-    "firstName": "Jane",
-    "lastName": "Smith",
+    "fullName": "Jane Smith",
     "email": "jane.smith@ozmo.io",
     "password": "Secure@789",
-    "role": "STAFF",
-    "department": "Engineering"
+    "workspaceName": "Ozmo Engineering"
   }'
 ```
 
@@ -955,6 +1024,87 @@ curl -X DELETE http://localhost:4000/api/v1/staff/3f2e1a4b-... \
   "data": {},
   "timestamp": "2026-05-31T10:00:00.000Z"
 }
+```
+
+---
+
+### Workspaces
+
+#### Get Workspace Details
+
+Retrieve the workspace details for the authenticated administrator, including associated staff, attendance records, and leave data.
+
+**`GET /api/v1/workspaces/my-workspace`** — Auth: Bearer token | Roles: `ADMIN`, `SUPER_ADMIN`
+
+##### Response — `200 OK`
+
+```json
+{
+  "success": true,
+  "message": "Workspace details with associated data retrieved successfully",
+  "data": {
+    "workspace": {
+      "id": "a2a03efe-5da3-4125-aade-3a0e9568f612",
+      "name": "Ozmo Engineering",
+      "plan": "FREE",
+      "isActive": true,
+      "memberCount": 1,
+      "adminEmail": "jane.smith@ozmo.io",
+      "logoUrl": "https://example.com/logo.png",
+      "createdAt": "2026-06-04T06:07:14.662Z",
+      "updatedAt": "2026-06-04T06:07:14.662Z",
+      "companyName": "Ozmo Innovations Inc.",
+      "businessType": "Software Service",
+      "industryType": "Technology",
+      "companySize": "10-49",
+      "country": "Singapore",
+      "website": "https://ozmo.io",
+      "companyEmail": "contact@ozmo.io",
+      "companyPhone": "+6512345678",
+      "companyAddress": "123 Technology Way",
+      "companyDescription": "Building Enterprise Workforce Software",
+      "attendanceMethod": "BIOMETRIC",
+      "defaultWorkingHours": "9:00 AM - 6:00 PM",
+      "weekendDays": ["Saturday", "Sunday"],
+      "leavePolicy": "14 days annual leave",
+      "pushNotifications": true,
+      "attendanceAlerts": false,
+      "leaveAlerts": true,
+      "taskAlerts": false,
+      "birthdayAlerts": true
+    },
+    "staff": [
+      {
+        "id": "1572d211-145e-47e7-bd3f-57861092af4e",
+        "employeeId": "OZ-2026-0005",
+        "firstName": "Jane",
+        "lastName": "Smith",
+        "email": "jane.smith@ozmo.io",
+        "phone": "+1234567890",
+        "role": "ADMIN",
+        "status": "ACTIVE",
+        "createdAt": "2026-06-04T06:07:15.409Z"
+      }
+    ],
+    "attendance": [
+      {
+        "id": "848243be-e260-449e-8798-e7c6b5a3ab11",
+        "userId": "1572d211-145e-47e7-bd3f-57861092af4e",
+        "checkInTime": "2026-06-04T06:10:00.000Z",
+        "checkOutTime": "2026-06-04T14:10:00.000Z",
+        "notes": "Remote work",
+        "createdAt": "2026-06-04T06:10:00.000Z"
+      }
+    ],
+    "leaves": []
+  },
+  "timestamp": "2026-06-04T06:07:16.970Z"
+}
+```
+
+```bash
+curl http://localhost:4000/api/v1/workspaces/my-workspace \
+  -H "Authorization: Bearer <ACCESS_TOKEN>"
 ```
 
 ---

@@ -19,6 +19,29 @@ export interface WorkspaceEntity {
   unsuspendedAt?: string;
   createdAt: string;
   updatedAt: string;
+
+  // New fields
+  companyName?: string;
+  businessType?: string;
+  industryType?: string;
+  companySize?: string;
+  country?: string;
+  website?: string;
+  companyEmail?: string;
+  companyPhone?: string;
+  companyAddress?: string;
+  companyDescription?: string;
+
+  attendanceMethod?: string;
+  defaultWorkingHours?: string;
+  weekendDays?: string[];
+  leavePolicy?: string;
+
+  pushNotifications?: boolean;
+  attendanceAlerts?: boolean;
+  leaveAlerts?: boolean;
+  taskAlerts?: boolean;
+  birthdayAlerts?: boolean;
 }
 
 @Injectable()
@@ -41,6 +64,28 @@ export class WorkspacesRepository {
       unsuspendedAt: ws.unsuspendedAt ? ws.unsuspendedAt.toISOString() : undefined,
       createdAt: ws.createdAt.toISOString(),
       updatedAt: ws.updatedAt.toISOString(),
+
+      companyName: ws.companyName ?? undefined,
+      businessType: ws.businessType ?? undefined,
+      industryType: ws.industryType ?? undefined,
+      companySize: ws.companySize ?? undefined,
+      country: ws.country ?? undefined,
+      website: ws.website ?? undefined,
+      companyEmail: ws.companyEmail ?? undefined,
+      companyPhone: ws.companyPhone ?? undefined,
+      companyAddress: ws.companyAddress ?? undefined,
+      companyDescription: ws.companyDescription ?? undefined,
+
+      attendanceMethod: ws.attendanceMethod ?? undefined,
+      defaultWorkingHours: ws.defaultWorkingHours ?? undefined,
+      weekendDays: ws.weekendDays,
+      leavePolicy: ws.leavePolicy ?? undefined,
+
+      pushNotifications: ws.pushNotifications,
+      attendanceAlerts: ws.attendanceAlerts,
+      leaveAlerts: ws.leaveAlerts,
+      taskAlerts: ws.taskAlerts,
+      birthdayAlerts: ws.birthdayAlerts,
     };
   }
 
@@ -58,6 +103,28 @@ export class WorkspacesRepository {
         suspendedBy: dto.suspendedBy,
         suspensionReason: dto.suspensionReason,
         unsuspendedAt: dto.unsuspendedAt ? new Date(dto.unsuspendedAt) : null,
+
+        companyName: dto.companyName,
+        businessType: dto.businessType,
+        industryType: dto.industryType,
+        companySize: dto.companySize,
+        country: dto.country,
+        website: dto.website,
+        companyEmail: dto.companyEmail,
+        companyPhone: dto.companyPhone,
+        companyAddress: dto.companyAddress,
+        companyDescription: dto.companyDescription,
+
+        attendanceMethod: dto.attendanceMethod,
+        defaultWorkingHours: dto.defaultWorkingHours,
+        weekendDays: dto.weekendDays ?? [],
+        leavePolicy: dto.leavePolicy,
+
+        pushNotifications: dto.pushNotifications,
+        attendanceAlerts: dto.attendanceAlerts,
+        leaveAlerts: dto.leaveAlerts,
+        taskAlerts: dto.taskAlerts,
+        birthdayAlerts: dto.birthdayAlerts,
       },
     });
     return this.mapToEntity(ws);

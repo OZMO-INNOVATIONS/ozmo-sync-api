@@ -5,6 +5,8 @@ import {
   UnprocessableEntityException,
 } from '@nestjs/common';
 import { WorkspacesRepository } from '../repositories/workspaces.repository';
+import { UserRepository } from '../repositories/user.repository';
+import { AttendanceRepository } from '../repositories/attendance.repository';
 import { AuditService } from '../audit/audit.service';
 import { CreateWorkspaceDto } from './dto/create-workspace.dto';
 import { UpdateWorkspaceDto } from './dto/update-workspace.dto';
@@ -15,8 +17,33 @@ import { RequestUser } from '../common/interfaces/request-user.interface';
 export class WorkspacesService {
   constructor(
     private readonly workspacesRepo: WorkspacesRepository,
+    private readonly userRepo: UserRepository,
+    private readonly attendanceRepo: AttendanceRepository,
     private readonly auditService: AuditService,
   ) {}
+
+  async getWorkspaceDetailsByAdmin(adminEmail: string) {
+    const workspaces = await this.workspacesRepo.findAll();
+    const workspace = workspaces.find((w) => w.adminEmail === adminEmail);
+    if (!workspace) {
+      throw new NotFoundException('Workspace not found for this administrator');
+    }
+
+    const staff = await this.userRepo.findAll();
+    const sanitizedStaff = staff.map((u) => {
+      const { password, refreshToken, ...safe } = u;
+      return safe;
+    });
+
+    const attendance = await this.attendanceRepo.findAll();
+
+    return {
+      workspace,
+      staff: sanitizedStaff,
+      attendance,
+      leaves: [],
+    };
+  }
 
   async listWorkspaces() {
     return await this.workspacesRepo.findAll();

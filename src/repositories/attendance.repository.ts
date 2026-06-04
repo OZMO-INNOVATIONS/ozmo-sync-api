@@ -105,4 +105,11 @@ export class AttendanceRepository {
     });
     return records.map((r) => this.mapToEntity(r));
   }
+
+  async findAll(): Promise<AttendanceRecord[]> {
+    const records = await this.prisma.attendanceRecord.findMany({
+      orderBy: { checkInTime: 'desc' },
+    });
+    return records.map((r) => this.mapToEntity(r));
+  }
 }

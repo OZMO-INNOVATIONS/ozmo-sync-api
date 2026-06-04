@@ -32,6 +32,13 @@ export class WorkspacesController {
     return { message: 'Workspaces retrieved', data };
   }
 
+  @Get('my-workspace')
+  @Roles(Role.ADMIN, Role.SUPER_ADMIN)
+  async getMyWorkspaceDetails(@CurrentUser() user: RequestUser) {
+    const data = await this.workspacesService.getWorkspaceDetailsByAdmin(user.email);
+    return { message: 'Workspace details with associated data retrieved successfully', data };
+  }
+
   @Get(':id')
   async getWorkspace(@Param('id') id: string) {
     const data = await this.workspacesService.getWorkspace(id);

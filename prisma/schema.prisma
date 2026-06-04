@@ -142,20 +142,42 @@ model AuditEntry {
 }
 
 model Workspace {
-  id               String        @id @default(uuid()) @db.Uuid
-  name             String        @db.VarChar(255)
-  domain           String?       @db.VarChar(255)
-  plan             WorkspacePlan @default(FREE)
-  isActive         Boolean       @default(true) @map("is_active")
-  memberCount      Int           @default(0) @map("member_count")
-  adminEmail       String?       @map("admin_email") @db.VarChar(255)
-  logoUrl          String?       @map("logo_url")
-  suspendedAt      DateTime?     @map("suspended_at")
-  suspendedBy      String?       @map("suspended_by") @db.VarChar(255)
-  suspensionReason String?       @map("suspension_reason")
-  unsuspendedAt    DateTime?     @map("unsuspended_at")
-  createdAt        DateTime      @default(now()) @map("created_at")
-  updatedAt        DateTime      @updatedAt @map("updated_at")
+  id                  String        @id @default(uuid()) @db.Uuid
+  name                String        @db.VarChar(255)
+  domain              String?       @db.VarChar(255)
+  plan                WorkspacePlan @default(FREE)
+  isActive            Boolean       @default(true) @map("is_active")
+  memberCount         Int           @default(0) @map("member_count")
+  adminEmail          String?       @map("admin_email") @db.VarChar(255)
+  logoUrl             String?       @map("logo_url")
+  suspendedAt         DateTime?     @map("suspended_at")
+  suspendedBy         String?       @map("suspended_by") @db.VarChar(255)
+  suspensionReason    String?       @map("suspension_reason")
+  unsuspendedAt       DateTime?     @map("unsuspended_at")
+  createdAt           DateTime      @default(now()) @map("created_at")
+  updatedAt           DateTime      @updatedAt @map("updated_at")
+  
+  companyName         String?       @map("company_name") @db.VarChar(255)
+  businessType        String?       @map("business_type") @db.VarChar(100)
+  industryType        String?       @map("industry_type") @db.VarChar(100)
+  companySize         String?       @map("company_size") @db.VarChar(50)
+  country             String?       @db.VarChar(100)
+  website             String?       @db.VarChar(255)
+  companyEmail        String?       @map("company_email") @db.VarChar(255)
+  companyPhone        String?       @map("company_phone") @db.VarChar(50)
+  companyAddress      String?       @map("company_address")
+  companyDescription  String?       @map("company_description")
+  
+  attendanceMethod    String?       @map("attendance_method") @db.VarChar(100)
+  defaultWorkingHours String?       @map("default_working_hours") @db.VarChar(100)
+  weekendDays         String[]      @map("weekend_days")
+  leavePolicy         String?       @map("leave_policy")
+  
+  pushNotifications   Boolean       @default(true) @map("push_notifications")
+  attendanceAlerts    Boolean       @default(true) @map("attendance_alerts")
+  leaveAlerts         Boolean       @default(true) @map("leave_alerts")
+  taskAlerts          Boolean       @default(true) @map("task_alerts")
+  birthdayAlerts      Boolean       @default(true) @map("birthday_alerts")
 
   @@map("workspaces")
 }
