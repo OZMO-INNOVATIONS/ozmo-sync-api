@@ -102,25 +102,21 @@ export class ReportsService {
     const users = await this.userRepo.findAll();
     const userMap = new Map(users.map((u) => [u.id, u]));
 
-    const effectiveFrom = from ?? new Date(0);
+        const effectiveFrom = from ?? new Date(0);
     const effectiveTo = to ?? new Date();
-    const records = await this.attendanceRepo.findAllInRange(effectiveFrom, effectiveTo);
+    const records = await this.attendanceRepo.findAllSessionsInRange(effectiveFrom, effectiveTo);
 
     return records.map((r) => {
       const user = userMap.get(r.userId);
-      const checkIn = new Date(r.checkInTime);
-      const checkOut = r.checkOutTime ? new Date(r.checkOutTime) : null;
-      const durationMin = checkOut
-        ? Math.round((checkOut.getTime() - checkIn.getTime()) / 60000)
-        : null;
+      const datePart = r.checkInTime.includes(', ') ? r.checkInTime.split(', ')[0] : r.checkInTime.slice(0, 10);
 
       return {
         'Employee ID': user?.employeeId ?? r.userId,
         Name: user ? `${user.firstName} ${user.lastName}` : r.userId,
-        Date: r.checkInTime.slice(0, 10),
+        Date: datePart,
         'Check-In': r.checkInTime,
         'Check-Out': r.checkOutTime ?? '',
-        'Duration (min)': durationMin ?? '',
+        'Duration (min)': r.durationMinutes ?? '',
         Notes: r.notes ?? '',
       };
     });

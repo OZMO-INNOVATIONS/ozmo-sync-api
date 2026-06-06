@@ -1,12 +1,12 @@
 import { Module } from '@nestjs/common';
 import { StaffController } from './staff.controller';
 import { StaffService } from './staff.service';
-import { StaffProfileRepository } from '../repositories/staff-profile.repository';
+import { WorkspacesRepository } from '../repositories/workspaces.repository';
 import { AuthModule } from '../auth/auth.module';
 
 @Module({
   imports: [AuthModule],
   controllers: [StaffController],
-  providers: [StaffService, StaffProfileRepository],
+  providers: [StaffService, WorkspacesRepository],
 })
 export class StaffModule {}

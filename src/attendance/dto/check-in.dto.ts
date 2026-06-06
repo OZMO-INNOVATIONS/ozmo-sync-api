@@ -7,5 +7,13 @@ export class CheckInDto {
 
   @IsOptional()
   @IsString()
+  location?: string;
+
+  @IsOptional()
+  @IsString()
+  deviceInfo?: string;
+
+  @IsOptional()
+  @IsString()
   notes?: string;
 }

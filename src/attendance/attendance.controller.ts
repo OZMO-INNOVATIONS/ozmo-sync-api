@@ -27,7 +27,7 @@ export class AttendanceController {
 
   @Post('check-in')
   @HttpCode(HttpStatus.CREATED)
-  @Roles(Role.STAFF, Role.TEAM_LEAD)
+  @Roles(Role.STAFF, Role.TEAM_LEAD, Role.ADMIN, Role.HR, Role.MANAGER)
   async checkIn(@CurrentUser() user: RequestUser, @Body() dto: CheckInDto) {
     const data = await this.attendanceService.checkIn(user.id, dto);
     return { message: 'Check-in recorded', data };
@@ -35,20 +35,43 @@ export class AttendanceController {
 
   @Post('check-out')
   @HttpCode(HttpStatus.OK)
-  @Roles(Role.STAFF, Role.TEAM_LEAD)
+  @Roles(Role.STAFF, Role.TEAM_LEAD, Role.ADMIN, Role.HR, Role.MANAGER)
   async checkOut(@CurrentUser() user: RequestUser, @Body() dto: CheckOutDto) {
     const data = await this.attendanceService.checkOut(user.id, dto);
     return { message: 'Check-out recorded', data };
   }
 
-  // Declare /my and /dashboard BEFORE /:userId to prevent route shadowing
-  @Get('my')
+  @Get('today')
+  async getTodayAttendance(@CurrentUser() user: RequestUser) {
+    const data = await this.attendanceService.getTodayAttendance(user.id);
+    return { message: 'Today attendance fetched', data };
+  }
+
+  @Get('history')
   async getMyAttendance(
     @CurrentUser() user: RequestUser,
     @Query() query: AttendanceQueryDto,
   ) {
-    const data = await this.attendanceService.getAttendance(user.id, query);
-    return { message: 'Attendance fetched', data };
+    const data = await this.attendanceService.getAttendanceHistory(user.id, query);
+    return { message: 'Attendance history fetched', data };
+  }
+
+  @Get('summary')
+  async getAttendanceSummary(
+    @CurrentUser() user: RequestUser,
+    @Query() query: AttendanceQueryDto,
+  ) {
+    const data = await this.attendanceService.getAttendanceSummary(user.id, query);
+    return { message: 'Attendance summary fetched', data };
+  }
+
+  @Get('monthly-report')
+  async getMonthlyReport(
+    @CurrentUser() user: RequestUser,
+    @Query() query: AttendanceQueryDto,
+  ) {
+    const data = await this.attendanceService.getMonthlyReport(user.id, query);
+    return { message: 'Monthly report fetched', data };
   }
 
   @Get('dashboard')
@@ -64,7 +87,7 @@ export class AttendanceController {
     @Param('userId') userId: string,
     @Query() query: AttendanceQueryDto,
   ) {
-    const data = await this.attendanceService.getAttendance(userId, query);
-    return { message: 'Attendance fetched', data };
+    const data = await this.attendanceService.getAttendanceHistory(userId, query);
+    return { message: 'Attendance history fetched', data };
   }
 }

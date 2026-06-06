@@ -30,15 +30,15 @@ export class StaffController {
   @Post()
   @HttpCode(HttpStatus.CREATED)
   @Roles(Role.ADMIN, Role.HR)
-  async createStaff(@Body() dto: CreateStaffDto) {
-    const data = await this.staffService.create(dto);
-    return { message: 'Staff member created', data };
+  async createStaff(@Body() dto: CreateStaffDto, @CurrentUser() actor: RequestUser) {
+    const data = await this.staffService.create(dto, actor);
+    return { message: 'Staff Created Successfully', data };
   }
 
   @Get()
   @Roles(Role.ADMIN, Role.HR, Role.MANAGER)
-  async listStaff() {
-    const data = await this.staffService.findAll();
+  async listStaff(@Query() query: StaffFilterDto) {
+    const data = await this.staffService.findAll(query);
     return { message: 'Staff list fetched', data };
   }
 

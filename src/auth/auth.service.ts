@@ -9,14 +9,18 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcryptjs';
 import * as jwt from 'jsonwebtoken';
+import * as crypto from 'crypto';
 import { UserRepository, UserEntity } from '../repositories/user.repository';
 import { WorkspacesRepository } from '../repositories/workspaces.repository';
 import { InvitationRepository } from '../repositories/invitation.repository';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
+import { ChangeInitialPasswordDto } from './dto/change-initial-password.dto';
 import { Role, UserStatus } from '../common/constants/roles.enum';
 import { JwtPayload } from '../common/interfaces/jwt-payload.interface';
-import { InvitationStatus } from '@prisma/client';
 
 @Injectable()
 export class AuthService {
@@ -53,17 +57,18 @@ export class AuthService {
 
     if (dto.token) {
       // 1. Resolve and validate invitation
-      const invite = await this.invitationRepo.findByToken(dto.token);
+      const tokenHash = crypto.createHash('sha256').update(dto.token).digest('hex');
+      const invite = await this.invitationRepo.findByTokenHash(tokenHash);
       if (!invite) {
         throw new BadRequestException('Invalid invitation token');
       }
 
-      if (invite.status !== InvitationStatus.PENDING) {
+      if (invite.status !== 'pending') {
         throw new BadRequestException(`Invitation is no longer active (status: ${invite.status})`);
       }
 
       if (new Date(invite.expiresAt).getTime() < Date.now()) {
-        await this.invitationRepo.updateStatus(invite.id, InvitationStatus.EXPIRED);
+        await this.invitationRepo.updateStatus(invite.id, 'expired');
         throw new BadRequestException('Invitation has expired');
       }
 
@@ -85,7 +90,7 @@ export class AuthService {
       });
 
       // Consume the invitation
-      await this.invitationRepo.updateStatus(invite.id, InvitationStatus.ACCEPTED);
+      await this.invitationRepo.updateStatus(invite.id, 'accepted', new Date());
     } else {
       // If registering without token, they must provide workspace name
       if (!dto.workspaceName) {
@@ -128,6 +133,7 @@ export class AuthService {
 
     // 2. Create the user
     const user = await this.userRepo.create({
+      fullName: dto.fullName || `${firstName} ${lastName}`.trim(),
       firstName,
       lastName,
       email: dto.email,
@@ -139,6 +145,9 @@ export class AuthService {
       employeeId,
       status: UserStatus.ACTIVE,
       refreshToken: null,
+      workspaceId: workspace ? workspace.id : '',
+      workspaceName: workspace ? workspace.name : undefined,
+      isFirstLogin: false,
     });
 
     const tokens = await this._issueTokens(user);
@@ -154,8 +163,12 @@ export class AuthService {
       ? await this.userRepo.findByEmail(dto.email)
       : await this.userRepo.findByEmployeeId(dto.employeeId!);
 
-    const isMatch = user ? await bcrypt.compare(dto.password, user.password) : false;
-    if (!user || !isMatch) {
+    if (!user) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    const isMatch = await bcrypt.compare(dto.password, user.password);
+    if (!isMatch) {
       throw new UnauthorizedException('Invalid credentials');
     }
     if (user.status !== UserStatus.ACTIVE) {
@@ -163,7 +176,12 @@ export class AuthService {
     }
 
     const tokens = await this._issueTokens(user);
-    return { ...tokens, user: this._sanitize(user) };
+    return {
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+      isFirstLogin: user.isFirstLogin,
+      user: this._sanitize(user),
+    };
   }
 
   async refresh(rawToken: string) {
@@ -193,6 +211,114 @@ export class AuthService {
 
   async logout(userId: string): Promise<void> {
     await this.userRepo.saveRefreshToken(userId, null);
+  }
+
+  async changeInitialPassword(userId: string, dto: ChangeInitialPasswordDto) {
+    if (dto.newPassword !== dto.confirmPassword) {
+      throw new BadRequestException('Passwords do not match');
+    }
+
+    const user = await this.userRepo.findById(userId);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    if (!user.isFirstLogin) {
+      throw new BadRequestException('Initial password change already completed');
+    }
+
+    const isMatch = await bcrypt.compare(dto.currentPassword, user.password);
+    if (!isMatch) {
+      throw new BadRequestException('Invalid current password');
+    }
+
+    const saltRounds = parseInt(this.configService.get<string>('BCRYPT_SALT_ROUNDS', '12'), 10);
+    const hashedPassword = await bcrypt.hash(dto.newPassword, saltRounds);
+
+    await this.userRepo.updateById(userId, {
+      password: hashedPassword,
+      isFirstLogin: false,
+      passwordChangedAt: new Date().toISOString(),
+    });
+  }
+
+  async changePassword(userId: string, dto: ChangePasswordDto) {
+    const user = await this.userRepo.findById(userId);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    if (!user.password) {
+      throw new BadRequestException('Please complete registration first');
+    }
+
+    const isMatch = await bcrypt.compare(dto.currentPassword, user.password);
+    if (!isMatch) {
+      throw new BadRequestException('Invalid current password');
+    }
+
+    const saltRounds = parseInt(this.configService.get<string>('BCRYPT_SALT_ROUNDS', '12'), 10);
+    const hashedPassword = await bcrypt.hash(dto.newPassword, saltRounds);
+
+    await this.userRepo.updateById(userId, {
+      password: hashedPassword,
+    });
+  }
+
+  async forgotPassword(dto: ForgotPasswordDto) {
+    const user = await this.userRepo.findByEmail(dto.email);
+    if (!user) {
+      return {
+        success: true,
+        message: 'Password reset link sent if email exists',
+      };
+    }
+
+    const token = jwt.sign(
+      { sub: user.id, email: user.email, purpose: 'reset-password' },
+      this.configService.get<string>('JWT_SECRET') || 'dev-jwt-secret-key-do-not-use-in-production-123456789',
+      { expiresIn: '1h', algorithm: 'HS256' }
+    );
+
+    return {
+      success: true,
+      message: 'Password reset token generated successfully',
+      token,
+    };
+  }
+
+  async resetPassword(dto: ResetPasswordDto) {
+    let payload: { sub: string; email: string; purpose: string };
+    try {
+      payload = jwt.verify(
+        dto.token,
+        this.configService.get<string>('JWT_SECRET') || 'dev-jwt-secret-key-do-not-use-in-production-123456789',
+      ) as any;
+    } catch {
+      throw new BadRequestException('Invalid or expired reset token');
+    }
+
+    if (payload.purpose !== 'reset-password') {
+      throw new BadRequestException('Invalid token purpose');
+    }
+
+    const user = await this.userRepo.findById(payload.sub);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    const saltRounds = parseInt(this.configService.get<string>('BCRYPT_SALT_ROUNDS', '12'), 10);
+    const hashedPassword = await bcrypt.hash(dto.password, saltRounds);
+
+    await this.userRepo.updateById(user.id, {
+      password: hashedPassword,
+      isFirstLogin: false,
+    });
+
+    return {
+      success: true,
+      message: 'Password reset successfully',
+    };
   }
 
   private async _issueTokens(user: UserEntity) {
@@ -229,7 +355,7 @@ export class AuthService {
 
   private async _generateEmployeeId(): Promise<string> {
     const year = new Date().getFullYear();
-    const count = (await this.userRepo.count()) + 1;
+    const count = (await this.userRepo.count(true)) + 1;
     return `OZ-${year}-${String(count).padStart(4, '0')}`;
   }
 }

@@ -13,12 +13,17 @@ Enterprise-grade Staff Management & Attendance Tracking REST API built with **Ne
 - [Roles & Permissions](#roles--permissions)
 - [API Documentation](#api-documentation)
   - [Response Envelope](#response-envelope)
+  - [Date & Time Formatting](#date--time-formatting)
   - [Endpoint Overview](#endpoint-overview)
   - [Authentication](#authentication)
     - [Register](#register)
     - [Login](#login)
     - [Refresh Token](#refresh-token)
     - [Logout](#logout)
+    - [Change Initial Password](#change-initial-password)
+    - [Change Password](#change-password)
+    - [Forgot Password](#forgot-password)
+    - [Reset Password](#reset-password)
   - [Profile](#profile)
     - [Get Own Profile](#get-own-profile)
     - [Update Own Profile](#update-own-profile)
@@ -41,6 +46,9 @@ Enterprise-grade Staff Management & Attendance Tracking REST API built with **Ne
     - [Delete Staff](#delete-staff)
   - [Workspaces](#workspaces)
     - [Get Workspace Details](#get-workspace-details)
+  - [Dashboard](#dashboard)
+    - [Get Admin Dashboard](#get-admin-dashboard)
+    - [Get Staff Dashboard](#get-staff-dashboard)
 - [Error Responses](#error-responses)
 - [HTTP Status Codes](#http-status-codes)
 
@@ -52,6 +60,8 @@ Enterprise-grade Staff Management & Attendance Tracking REST API built with **Ne
 | ----------------- | ---------------------------------- |
 | NestJS 10         | Web framework                      |
 | TypeScript 5      | Type safety                        |
+| Prisma ORM        | Database client & migrations       |
+| PostgreSQL        | Database storage                   |
 | @nestjs/passport  | JWT authentication strategy        |
 | @nestjs/jwt       | JWT signing & verification         |
 | passport-jwt      | Passport JWT strategy              |
@@ -88,10 +98,9 @@ src/
 │       ├── request-user.interface.ts
 │       └── api-response.interface.ts
 │
-├── repositories/                        # Phase 1: injectable in-memory Map stores
+├── repositories/                        # Database repositories using Prisma ORM
 │   ├── user.repository.ts
-│   ├── attendance.repository.ts
-│   └── staff-profile.repository.ts
+│   └── attendance.repository.ts
 │
 ├── auth/                                # register, login, refresh, logout
 │   ├── auth.module.ts
@@ -127,7 +136,7 @@ src/
         └── staff-filter.dto.ts
 
 prisma/
-└── schema.prisma                        # Phase 3: PostgreSQL schema (ready, not yet wired)
+└── schema.prisma                        # Prisma schema defining the database models
 ```
 
 ---
@@ -175,7 +184,7 @@ Server starts at `http://localhost:4000/api/v1`
 | `JWT_REFRESH_EXPIRES` | `7d`                    | Refresh token TTL                 |
 | `BCRYPT_SALT_ROUNDS`  | `12`                    | bcrypt hashing cost factor        |
 | `ALLOWED_ORIGINS`     | `http://localhost:3000` | Comma-separated CORS origins      |
-| `DATABASE_URL`        | —                       | PostgreSQL connection (Phase 3)   |
+| `DATABASE_URL`        | —                       | PostgreSQL connection string      |
 
 ---
 
@@ -226,6 +235,18 @@ All responses share the same structure.
 
 ---
 
+### Date & Time Formatting
+
+To ensure consistent and readable time presentation across clients (such as mobile apps and dashboards), the API standardizes dates and times in all JSON responses using the following formats:
+
+*   **Datetime Fields** (e.g., `checkInTime`, `checkOutTime`, `createdAt`): `"DD Mon YYYY, hh:mm AM/PM"` (e.g., `"06 Jun 2026, 01:29 PM"`).
+*   **Date-Only Fields** (e.g., `joiningDate`): `"DD Mon YYYY"` (e.g., `"06 Jun 2026"`).
+*   **Duration Fields** (e.g., `duration`): Formatted dynamically (e.g., `"8h 30m"`, or `"45m"`).
+*   **API Response Envelope `timestamp`**: Remains standard ISO 8601 string format (e.g., `"2026-05-31T10:00:00.000Z"`).
+*   **Request Params & Bodies**: Inputs (such as filters, queries, or creation data) expect standard formats like `YYYY-MM-DD` or ISO strings.
+
+---
+
 ### Endpoint Overview
 
 | Method   | Endpoint                        | Auth        | Roles                              |
@@ -234,6 +255,10 @@ All responses share the same structure.
 | `POST`   | `/auth/login`                   | None        | —                                  |
 | `POST`   | `/auth/refresh`                 | None        | —                                  |
 | `POST`   | `/auth/logout`                  | JWT         | Any                                |
+| `POST`   | `/auth/change-initial-password` | JWT         | Any                                |
+| `PUT`    | `/auth/change-password`         | JWT         | Any                                |
+| `POST`   | `/auth/forgot-password`         | None        | —                                  |
+| `POST`   | `/auth/reset-password`          | None        | —                                  |
 | `GET`    | `/profile`                      | JWT         | Any                                |
 | `PUT`    | `/profile`                      | JWT         | Any                                |
 | `GET`    | `/users`                        | JWT + Roles | `ADMIN` `HR` `MANAGER`             |
@@ -255,6 +280,8 @@ All responses share the same structure.
 | `POST`   | `/invitations`                  | JWT + Roles | `ADMIN` `SUPER_ADMIN`              |
 | `GET`    | `/invitations`                  | JWT + Roles | `ADMIN` `SUPER_ADMIN`              |
 | `POST`   | `/invitations/:token/revoke`    | JWT + Roles | `ADMIN` `SUPER_ADMIN`              |
+| `GET`    | `/dashboard/admin`              | JWT + Roles | `ADMIN` `SUPER_ADMIN` `HR` `MANAGER`|
+| `GET`    | `/dashboard/staff`              | JWT         | Any                                |
 
 ---
 
@@ -346,7 +373,7 @@ Create a new account and receive a token pair. `employeeId` is auto-generated in
       "email": "jane.smith@ozmo.io",
       "role": "ADMIN",
       "status": "ACTIVE",
-      "createdAt": "2026-05-31T10:00:00.000Z"
+      "createdAt": "31 May 2026, 10:00 AM"
     },
     "workspace": {
       "id": "7b2e1a4b-...",
@@ -375,8 +402,8 @@ Create a new account and receive a token pair. `employeeId` is auto-generated in
       "leaveAlerts": true,
       "taskAlerts": false,
       "birthdayAlerts": true,
-      "createdAt": "2026-05-31T10:00:00.000Z",
-      "updatedAt": "2026-05-31T10:00:00.000Z"
+      "createdAt": "31 May 2026, 10:00 AM",
+      "updatedAt": "31 May 2026, 10:00 AM"
     }
   },
   "timestamp": "2026-05-31T10:00:00.000Z"
@@ -433,6 +460,7 @@ Authenticate with **email** or **employeeId** plus password.
   "data": {
     "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
     "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "isFirstLogin": false,
     "user": {
       "id": "3f2e1a4b-...",
       "employeeId": "OZ-2026-0001",
@@ -520,6 +548,115 @@ curl -X POST http://localhost:4000/api/v1/auth/logout \
 
 ---
 
+#### Change Initial Password
+
+For newly created staff logging in with a temporary password, the system forces a password change before they can access the application.
+
+**`POST /api/v1/auth/change-initial-password`** — Auth: Bearer token
+
+##### Request Body
+
+```json
+{
+  "currentPassword": "Welcome@123",
+  "newPassword": "John@123",
+  "confirmPassword": "John@123"
+}
+```
+
+##### Response — `200 OK`
+
+```json
+{
+  "success": true,
+  "message": "Password changed successfully",
+  "timestamp": "2026-06-06T12:00:00.000Z"
+}
+```
+
+---
+
+#### Change Password
+
+Change password for the authenticated user.
+
+**`PUT /api/v1/auth/change-password`** — Auth: Bearer token
+
+##### Request Body
+
+```json
+{
+  "currentPassword": "OldPassword@123",
+  "newPassword": "NewPassword@123"
+}
+```
+
+##### Response — `200 OK`
+
+```json
+{
+  "success": true,
+  "message": "Password changed successfully",
+  "timestamp": "2026-06-05T19:13:09.578Z"
+}
+```
+
+---
+
+#### Forgot Password
+
+Request a password reset link/token. In development/testing environments, the reset token is returned directly in the response body.
+
+**`POST /api/v1/auth/forgot-password`** — Auth: None
+
+##### Request Body
+
+```json
+{
+  "email": "staff@company.com"
+}
+```
+
+##### Response — `200 OK`
+
+```json
+{
+  "success": true,
+  "message": "Password reset token generated successfully",
+  "token": "reset-token-value...",
+  "timestamp": "2026-06-05T19:13:10.281Z"
+}
+```
+
+---
+
+#### Reset Password
+
+Reset password using the token retrieved from the forgot password flow.
+
+**`POST /api/v1/auth/reset-password`** — Auth: None
+
+##### Request Body
+
+```json
+{
+  "token": "reset-token-value...",
+  "password": "NewPassword@123"
+}
+```
+
+##### Response — `200 OK`
+
+```json
+{
+  "success": true,
+  "message": "Password reset successfully",
+  "timestamp": "2026-06-05T19:13:11.985Z"
+}
+```
+
+---
+
 ### Profile
 
 #### Get Own Profile
@@ -546,7 +683,7 @@ curl http://localhost:4000/api/v1/profile \
     "role": "STAFF",
     "department": "Engineering",
     "status": "ACTIVE",
-    "createdAt": "2026-05-31T10:00:00.000Z"
+    "createdAt": "31 May 2026, 10:00 AM"
   },
   "timestamp": "2026-05-31T10:00:00.000Z"
 }
@@ -558,22 +695,38 @@ curl http://localhost:4000/api/v1/profile \
 
 **`PUT /api/v1/profile`** — Auth: Bearer token | Roles: Any
 
-All fields are optional. Email, password, and role cannot be changed here.
+All fields are optional.
+
+> [!IMPORTANT]
+> **Profile Modification Restrictions**:
+> - Non-admin/HR staff members can only update: `firstName`, `lastName`, `phone`, `profilePhoto`, `address`, `emergencyContact`, and `bio`.
+> - Restricted fields (`email`, `role`, `designation`, `department`, `employeeId`, `joiningDate`, `workspaceId`, `workspaceName`) can only be modified by administrators. Attempting to modify restricted fields as a standard staff member will return a `403 Forbidden` error.
 
 ##### Request Body
 
-| Field         | Type   | Validation  |
-| ------------- | ------ | ----------- |
-| `firstName`   | string | 2–50 chars  |
-| `lastName`    | string | 2–50 chars  |
-| `phone`       | string |             |
-| `designation` | string |             |
-| `department`  | string |             |
+| Field              | Type   | Validation  | Description                                                         |
+| ------------------ | ------ | ----------- | ------------------------------------------------------------------- |
+| `firstName`        | string | 2–50 chars  | First name of the user                                              |
+| `lastName`         | string | 2–50 chars  | Last name of the user                                               |
+| `phone`            | string |             | Phone number                                                        |
+| `profilePhoto`     | string |             | Profile photo URL                                                   |
+| `address`          | string |             | Full address                                                        |
+| `emergencyContact` | string |             | Emergency contact info (e.g. `John Doe (+919999999999)`)           |
+| `bio`              | string |             | Brief bio text                                                      |
+| `email`            | string |             | (Restricted) User email                                             |
+| `role`             | enum   |             | (Restricted) User role                                              |
+| `designation`      | string |             | (Restricted) Designation/title                                      |
+| `department`       | string |             | (Restricted) Department                                             |
+| `employeeId`       | string |             | (Restricted) Employee ID                                            |
+| `joiningDate`      | string |             | (Restricted) ISO joining date string                                |
+| `workspaceId`      | string |             | (Restricted) Workspace ID                                           |
+| `workspaceName`    | string |             | (Restricted) Workspace Name                                         |
 
 ```json
 {
   "phone": "+60123456789",
-  "department": "Product"
+  "emergencyContact": "Jane Doe (+919999999999)",
+  "bio": "Software Engineer at OZMO"
 }
 ```
 
@@ -675,7 +828,7 @@ Returns `409 Conflict` if already checked in without checking out.
 
 | Field         | Type   | Description                                    |
 | ------------- | ------ | ---------------------------------------------- |
-| `checkInTime` | string | ISO 8601 datetime. Defaults to server `NOW()`  |
+| `checkInTime` | string | Optional ISO 8601 datetime override. Defaults to server `NOW()` |
 | `notes`       | string | Optional note                                  |
 
 ```json
@@ -700,9 +853,10 @@ curl -X POST http://localhost:4000/api/v1/attendance/check-in \
   "data": {
     "id": "a1b2c3d4-...",
     "userId": "3f2e1a4b-...",
-    "checkInTime": "2026-05-31T09:00:00.000Z",
+    "checkInTime": "31 May 2026, 09:00 AM",
     "checkOutTime": null,
-    "notes": "Working from home today"
+    "notes": "Working from home today",
+    "createdAt": "31 May 2026, 09:00 AM"
   },
   "timestamp": "2026-05-31T09:00:00.000Z"
 }
@@ -729,9 +883,10 @@ curl -X POST http://localhost:4000/api/v1/attendance/check-out \
   "message": "Check-out recorded",
   "data": {
     "id": "a1b2c3d4-...",
-    "checkInTime": "2026-05-31T09:00:00.000Z",
-    "checkOutTime": "2026-05-31T17:30:00.000Z",
-    "durationMinutes": 510
+    "checkInTime": "31 May 2026, 09:00 AM",
+    "checkOutTime": "31 May 2026, 05:30 PM",
+    "durationMinutes": 510,
+    "duration": "8h 30m"
   },
   "timestamp": "2026-05-31T17:30:00.000Z"
 }
@@ -767,10 +922,11 @@ curl "http://localhost:4000/api/v1/attendance/my?month=2026-05" \
   "data": [
     {
       "id": "a1b2c3d4-...",
-      "checkInTime": "2026-05-31T09:00:00.000Z",
-      "checkOutTime": "2026-05-31T17:30:00.000Z",
-      "durationMinutes": 510,
-      "notes": null
+      "userId": "3f2e1a4b-...",
+      "checkInTime": "31 May 2026, 09:00 AM",
+      "checkOutTime": "31 May 2026, 05:30 PM",
+      "notes": null,
+      "createdAt": "31 May 2026, 09:00 AM"
     }
   ],
   "timestamp": "2026-05-31T10:00:00.000Z"
@@ -797,16 +953,15 @@ curl "http://localhost:4000/api/v1/attendance/dashboard?date=2026-05-31" \
   "success": true,
   "message": "Dashboard data fetched",
   "data": {
-    "date": "2026-05-31",
-    "summary": { "present": 18, "absent": 4, "late": 2 },
-    "records": [
-      {
-        "userId": "...",
-        "employeeId": "OZ-2026-0001",
-        "firstName": "Jane",
-        "checkInTime": "2026-05-31T09:00:00.000Z"
-      }
-    ]
+    "period": {
+      "from": "31 May 2026, 12:00 AM",
+      "to": "31 May 2026, 11:59 PM"
+    },
+    "totalPresent": 18,
+    "totalSessions": 20,
+    "completedSessions": 18,
+    "totalDurationMinutes": 9180,
+    "totalDuration": "153h"
   },
   "timestamp": "2026-05-31T10:00:00.000Z"
 }
@@ -835,24 +990,22 @@ curl "http://localhost:4000/api/v1/attendance/3f2e1a4b-...?month=2026-05" \
 
 ##### Request Body
 
-| Field         | Type   | Required | Validation                                 |
-| ------------- | ------ | :------: | ------------------------------------------ |
-| `firstName`   | string | Yes      | 2–50 characters                            |
-| `lastName`    | string | Yes      | 2–50 characters                            |
-| `email`       | string | Yes      | Valid email, normalized to lowercase       |
-| `password`    | string | Yes      | Min 8 chars, at least 1 uppercase, 1 digit |
-| `role`        | enum   | Yes      | Role enum value                            |
-| `phone`       | string | No       |                                            |
-| `designation` | string | No       |                                            |
-| `department`  | string | No       |                                            |
-| `joiningDate` | string | No       | ISO 8601 date                              |
+| Field               | Type   | Required | Validation / Description                                 |
+| ------------------- | ------ | :------: | -------------------------------------------------------- |
+| `fullName`          | string |   Yes    | Full name of the staff member (splits into first/last name). |
+| `email`             | string |   Yes    | Valid email, normalized to lowercase                     |
+| `temporaryPassword` | string |   Yes    | Temporary password, min length 8 characters              |
+| `role`              | enum   |   Yes    | Role enum value                                          |
+| `phone`             | string |    No    | Phone number                                             |
+| `designation`       | string |    No    | Job designation                                          |
+| `department`        | string |    No    | Department name                                          |
+| `joiningDate`       | string |    No    | ISO 8601 date string                                     |
 
 ```json
 {
-  "firstName": "Ahmad",
-  "lastName": "Razif",
+  "fullName": "Ahmad Razif",
   "email": "ahmad.razif@ozmo.io",
-  "password": "Welcome@123",
+  "temporaryPassword": "Welcome@123",
   "role": "MANAGER",
   "department": "Operations",
   "joiningDate": "2026-06-01"
@@ -864,12 +1017,12 @@ curl -X POST http://localhost:4000/api/v1/staff \
   -H "Authorization: Bearer <ACCESS_TOKEN>" \
   -H "Content-Type: application/json" \
   -d '{
-    "firstName": "Ahmad",
-    "lastName": "Razif",
+    "fullName": "Ahmad Razif",
     "email": "ahmad.razif@ozmo.io",
-    "password": "Welcome@123",
+    "temporaryPassword": "Welcome@123",
     "role": "MANAGER",
-    "department": "Operations"
+    "department": "Operations",
+    "joiningDate": "2026-06-01"
   }'
 ```
 
@@ -880,14 +1033,9 @@ curl -X POST http://localhost:4000/api/v1/staff \
   "success": true,
   "message": "Staff member created",
   "data": {
-    "id": "...",
+    "id": "7163c4af-e076-462a-a343-21abb610d3df",
     "employeeId": "OZ-2026-0002",
-    "firstName": "Ahmad",
-    "lastName": "Razif",
-    "email": "ahmad.razif@ozmo.io",
-    "role": "MANAGER",
-    "department": "Operations",
-    "status": "ACTIVE"
+    "isFirstLogin": true
   },
   "timestamp": "2026-05-31T10:00:00.000Z"
 }
@@ -899,8 +1047,19 @@ curl -X POST http://localhost:4000/api/v1/staff \
 
 **`GET /api/v1/staff`** — Auth: Bearer token | Roles: `ADMIN` `HR` `MANAGER`
 
+##### Query Parameters (all optional)
+
+| Param | Type | Example | Description |
+| --- | --- | --- | --- |
+| `page` | number | `?page=1` | Page number for pagination (default: 1) |
+| `limit` | number | `?limit=20` | Max results per page (default: 20) |
+| `role` | enum | `?role=STAFF` | Filter by user Role |
+| `department` | string | `?department=Engineering` | Filter by department |
+| `status` | enum | `?status=ACTIVE` | Filter by user status (`ACTIVE`, `INACTIVE`, `RESIGNED`, `TERMINATED`) |
+| `sort` | string | `?sort=name` | Sort field: `name` (first and last name) or `joiningDate` |
+
 ```bash
-curl http://localhost:4000/api/v1/staff \
+curl "http://localhost:4000/api/v1/staff?page=1&limit=20&role=STAFF&sort=name" \
   -H "Authorization: Bearer <ACCESS_TOKEN>"
 ```
 
@@ -1046,63 +1205,129 @@ Retrieve the workspace details for the authenticated administrator, including as
   "success": true,
   "message": "Workspace details with associated data retrieved successfully",
   "data": {
-    "workspace": {
-      "id": "a2a03efe-5da3-4125-aade-3a0e9568f612",
-      "name": "Ozmo Engineering",
+    "workspaceDetails": {
+      "id": "2c13d182-4556-4056-bc11-bc7c5a49633b",
+      "name": "OZMO Innovations 1780686965510",
       "plan": "FREE",
       "isActive": true,
       "memberCount": 1,
-      "adminEmail": "jane.smith@ozmo.io",
-      "logoUrl": "https://example.com/logo.png",
-      "createdAt": "2026-06-04T06:07:14.662Z",
-      "updatedAt": "2026-06-04T06:07:14.662Z",
-      "companyName": "Ozmo Innovations Inc.",
-      "businessType": "Software Service",
-      "industryType": "Technology",
-      "companySize": "10-49",
-      "country": "Singapore",
-      "website": "https://ozmo.io",
-      "companyEmail": "contact@ozmo.io",
-      "companyPhone": "+6512345678",
-      "companyAddress": "123 Technology Way",
-      "companyDescription": "Building Enterprise Workforce Software",
-      "attendanceMethod": "BIOMETRIC",
-      "defaultWorkingHours": "9:00 AM - 6:00 PM",
-      "weekendDays": ["Saturday", "Sunday"],
-      "leavePolicy": "14 days annual leave",
+      "adminEmail": "admin_1780686965510@example.com",
+      "createdAt": "2026-06-05T19:16:07.116Z",
+      "updatedAt": "2026-06-05T19:16:07.116Z",
+      "weekendDays": [],
       "pushNotifications": true,
-      "attendanceAlerts": false,
+      "attendanceAlerts": true,
       "leaveAlerts": true,
-      "taskAlerts": false,
+      "taskAlerts": true,
       "birthdayAlerts": true
     },
-    "staff": [
+    "workspace": {
+      "id": "2c13d182-4556-4056-bc11-bc7c5a49633b",
+      "name": "OZMO Innovations 1780686965510",
+      "plan": "FREE",
+      "isActive": true,
+      "memberCount": 1,
+      "adminEmail": "admin_1780686965510@example.com",
+      "createdAt": "2026-06-05T19:16:07.116Z",
+      "updatedAt": "2026-06-05T19:16:07.116Z",
+      "weekendDays": [],
+      "pushNotifications": true,
+      "attendanceAlerts": true,
+      "leaveAlerts": true,
+      "taskAlerts": true,
+      "birthdayAlerts": true
+    },
+    "totalEmployees": 2,
+    "activeEmployees": 2,
+    "staffList": [
       {
-        "id": "1572d211-145e-47e7-bd3f-57861092af4e",
-        "employeeId": "OZ-2026-0005",
-        "firstName": "Jane",
-        "lastName": "Smith",
-        "email": "jane.smith@ozmo.io",
-        "phone": "+1234567890",
+        "id": "7163c4af-e076-462a-a343-21abb610d3df",
+        "employeeId": "OZ-2026-0009",
+        "firstName": "John",
+        "lastName": "Admin",
+        "email": "admin_1780686965510@example.com",
         "role": "ADMIN",
         "status": "ACTIVE",
-        "createdAt": "2026-06-04T06:07:15.409Z"
+        "createdAt": "05 Jun 2026, 07:16 PM",
+        "isRegistrationCompleted": true,
+        "workspaceId": "2c13d182-4556-4056-bc11-bc7c5a49633b",
+        "workspaceName": "OZMO Innovations 1780686965510"
+      },
+      {
+        "id": "904f618f-8ea4-41a4-bf1e-704bc35f7cfb",
+        "employeeId": "OZ-2026-0010",
+        "firstName": "Alice",
+        "lastName": "Staff",
+        "email": "staff_1780686965510@example.com",
+        "phone": "9876543210",
+        "role": "STAFF",
+        "designation": "Software Engineer",
+        "department": "Engineering",
+        "joiningDate": "05 Jun 2026",
+        "status": "ACTIVE",
+        "createdAt": "05 Jun 2026, 07:16 PM",
+        "isRegistrationCompleted": true,
+        "workspaceId": "2c13d182-4556-4056-bc11-bc7c5a49633b",
+        "workspaceName": "OZMO Innovations 1780686965510",
+        "profilePhoto": "https://example.com/avatar.png"
       }
     ],
+    "staff": [
+      {
+        "id": "7163c4af-e076-462a-a343-21abb610d3df",
+        "employeeId": "OZ-2026-0009",
+        "firstName": "John",
+        "lastName": "Admin",
+        "email": "admin_1780686965510@example.com",
+        "role": "ADMIN",
+        "status": "ACTIVE",
+        "createdAt": "05 Jun 2026, 07:16 PM",
+        "isRegistrationCompleted": true,
+        "workspaceId": "2c13d182-4556-4056-bc11-bc7c5a49633b",
+        "workspaceName": "OZMO Innovations 1780686965510"
+      },
+      {
+        "id": "904f618f-8ea4-41a4-bf1e-704bc35f7cfb",
+        "employeeId": "OZ-2026-0010",
+        "firstName": "Alice",
+        "lastName": "Staff",
+        "email": "staff_1780686965510@example.com",
+        "phone": "9876543210",
+        "role": "STAFF",
+        "designation": "Software Engineer",
+        "department": "Engineering",
+        "joiningDate": "05 Jun 2026",
+        "status": "ACTIVE",
+        "createdAt": "05 Jun 2026, 07:16 PM",
+        "isRegistrationCompleted": true,
+        "workspaceId": "2c13d182-4556-4056-bc11-bc7c5a49633b",
+        "workspaceName": "OZMO Innovations 1780686965510",
+        "profilePhoto": "https://example.com/avatar.png"
+      }
+    ],
+    "attendanceSummary": {
+      "presentToday": 1,
+      "absentToday": 1
+    },
+    "leaveSummary": {
+      "pendingLeaves": 2,
+      "approvedLeaves": 5
+    },
     "attendance": [
       {
         "id": "848243be-e260-449e-8798-e7c6b5a3ab11",
-        "userId": "1572d211-145e-47e7-bd3f-57861092af4e",
-        "checkInTime": "2026-06-04T06:10:00.000Z",
-        "checkOutTime": "2026-06-04T14:10:00.000Z",
+        "userId": "904f618f-8ea4-41a4-bf1e-704bc35f7cfb",
+        "checkInTime": "05 Jun 2026, 07:16 PM",
+        "checkOutTime": "05 Jun 2026, 07:16 PM",
         "notes": "Remote work",
-        "createdAt": "2026-06-04T06:10:00.000Z"
+        "createdAt": "05 Jun 2026, 07:16 PM"
       }
     ],
     "leaves": []
   },
-  "timestamp": "2026-06-04T06:07:16.970Z"
+  "timestamp": "2026-06-05T19:16:35.809Z"
 }
+```
 ```
 
 ```bash
@@ -1148,7 +1373,7 @@ Invite a new member to join the workspace. Generates a unique registration token
     "status": "PENDING",
     "workspaceId": "a2a03efe-5da3-4125-aade-3a0e9568f612",
     "invitedById": "1572d211-145e-47e7-bd3f-57861092af4e",
-    "expiresAt": "2026-06-11T06:07:14.662Z",
+    "expiresAt": "11 Jun 2026, 06:07 AM",
     "signupUrl": "http://localhost:3000/auth/register?token=c3617be3-fe44-4861-ad81-cfb01f652cb9"
   },
   "timestamp": "2026-06-04T06:07:16.970Z"
@@ -1185,9 +1410,9 @@ Retrieve all invitations sent from the admin's workspace.
       "status": "PENDING",
       "workspaceId": "a2a03efe-5da3-4125-aade-3a0e9568f612",
       "invitedById": "1572d211-145e-47e7-bd3f-57861092af4e",
-      "expiresAt": "2026-06-11T06:07:14.662Z",
-      "createdAt": "2026-06-04T06:07:14.662Z",
-      "updatedAt": "2026-06-04T06:07:14.662Z"
+      "expiresAt": "11 Jun 2026, 06:07 AM",
+      "createdAt": "04 Jun 2026, 06:07 AM",
+      "updatedAt": "04 Jun 2026, 06:07 AM"
     }
   ],
   "timestamp": "2026-06-04T06:07:16.970Z"
@@ -1223,6 +1448,67 @@ Revoke an active pending invitation.
 
 ```bash
 curl -X POST http://localhost:4000/api/v1/invitations/c3617be3-fe44-4861-ad81-cfb01f652cb9/revoke \
+  -H "Authorization: Bearer <ACCESS_TOKEN>"
+```
+
+---
+
+### Dashboard
+
+#### Get Admin Dashboard
+
+Retrieve statistics for the administration dashboard, reflecting the total and active workforce.
+
+**`GET /api/v1/dashboard/admin`** — Auth: Bearer token | Roles: `ADMIN`, `SUPER_ADMIN`, `HR`, `MANAGER`
+
+##### Response — `200 OK`
+
+```json
+{
+  "success": true,
+  "message": "Admin dashboard statistics retrieved successfully",
+  "data": {
+    "totalEmployees": 2,
+    "presentToday": 0,
+    "absentToday": 2,
+    "leaveRequests": 3,
+    "newEmployees": 2
+  },
+  "timestamp": "2026-06-05T19:16:39.252Z"
+}
+```
+
+```bash
+curl http://localhost:4000/api/v1/dashboard/admin \
+  -H "Authorization: Bearer <ACCESS_TOKEN>"
+```
+
+---
+
+#### Get Staff Dashboard
+
+Retrieve personal workspace statistics for the currently authenticated staff member.
+
+**`GET /api/v1/dashboard/staff`** — Auth: Bearer token | Roles: Any
+
+##### Response — `200 OK`
+
+```json
+{
+  "success": true,
+  "message": "Staff dashboard statistics retrieved successfully",
+  "data": {
+    "attendanceStatus": "Not Checked In",
+    "todayHours": 0.0,
+    "pendingLeaves": 1,
+    "tasksAssigned": 5
+  },
+  "timestamp": "2026-06-05T19:16:41.942Z"
+}
+```
+
+```bash
+curl http://localhost:4000/api/v1/dashboard/staff \
   -H "Authorization: Bearer <ACCESS_TOKEN>"
 ```
 

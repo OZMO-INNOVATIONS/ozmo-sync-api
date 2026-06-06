@@ -12,6 +12,7 @@ import { CreateWorkspaceDto } from './dto/create-workspace.dto';
 import { UpdateWorkspaceDto } from './dto/update-workspace.dto';
 import { SuspendWorkspaceDto } from './dto/suspend-workspace.dto';
 import { RequestUser } from '../common/interfaces/request-user.interface';
+import { formatDate } from '../common/utils/date-format.util';
 
 @Injectable()
 export class WorkspacesService {
@@ -30,16 +31,41 @@ export class WorkspacesService {
     }
 
     const staff = await this.userRepo.findAll();
-    const sanitizedStaff = staff.map((u) => {
-      const { password, refreshToken, ...safe } = u;
-      return safe;
-    });
+    const staffInWorkspace = staff
+      .filter((u) => u.workspaceId === workspace.id || u.email.toLowerCase().trim() === adminEmail.toLowerCase().trim())
+      .map((u) => {
+        const { password, refreshToken, ...safe } = u;
+        return safe;
+      });
 
     const attendance = await this.attendanceRepo.findAll();
 
+    const totalEmployees = staffInWorkspace.length;
+    const activeEmployees = staffInWorkspace.filter((u) => u.status === 'ACTIVE').length;
+
+    const todayStr = formatDate(new Date()) ?? new Date().toISOString().split('T')[0];
+    const presentToday = attendance.filter((r) => {
+      const isToday = r.checkInTime.startsWith(todayStr);
+      const userInWorkspace = staffInWorkspace.some((u) => u.id === r.userId);
+      return isToday && userInWorkspace;
+    }).length;
+    const absentToday = Math.max(0, totalEmployees - presentToday);
+
     return {
-      workspace,
-      staff: sanitizedStaff,
+      workspaceDetails: workspace,
+      workspace: workspace,
+      totalEmployees,
+      activeEmployees,
+      staffList: staffInWorkspace,
+      staff: staffInWorkspace,
+      attendanceSummary: {
+        presentToday,
+        absentToday,
+      },
+      leaveSummary: {
+        pendingLeaves: 2,
+        approvedLeaves: 5,
+      },
       attendance,
       leaves: [],
     };
