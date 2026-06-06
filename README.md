@@ -71,6 +71,16 @@ Enterprise-grade Staff Management & Attendance Tracking REST API built with **Ne
 | uuid              | Unique ID generation               |
 | @nestjs/config    | Environment variable management    |
 | jsonwebtoken      | Refresh token signing              |
+---
+
+## Database Architecture
+
+OZMO SYNC uses a strictly separated schema structure mapping to a multi-tenant PostgreSQL database:
+- **`users` table**: Exclusively handles core identity, credentials, roles, and status.
+- **`staff_profiles` table**: Holds all HR-related employee fields, contact info, and role designations.
+- **Enterprise Modules**: Additional models mapped for Leave Management (`leave_types`, `leave_requests`), Projects (`projects`, `project_members`, `tasks`), and `notifications`.
+
+*(Note: While the database layer strictly separates these domains, the API abstracts them transparently behind unified entities, meaning your HTTP payloads and responses remain entirely unaffected by this separation!)*
 
 ---
 
