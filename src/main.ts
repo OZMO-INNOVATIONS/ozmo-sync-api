@@ -20,9 +20,9 @@ async function bootstrap() {
   }
 
   app.enableCors({
-    origin: config.corsOrigin.split(',').map((o) => o.trim()),
-    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
-    credentials: true,
+    origin: '*',
+    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
+    allowedHeaders: ['Content-Type', 'Accept', 'Authorization'],
   });
 
   app.use(
