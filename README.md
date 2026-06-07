@@ -76,11 +76,11 @@ Enterprise-grade Staff Management & Attendance Tracking REST API built with **Ne
 ## Database Architecture
 
 OZMO SYNC uses a strictly separated schema structure mapping to a multi-tenant PostgreSQL database:
-- **`users` table**: Exclusively handles core identity, credentials, roles, and status.
-- **`staff_profiles` table**: Holds all HR-related employee fields, contact info, and role designations.
+- **`users` table**: Handles core identity, credentials, roles, and status. It also stores `firstName` and `lastName` to ensure all users have names regardless of their role.
+- **`staff_profiles` table**: Holds all HR-related employee fields, contact info, and role designations. *(Note: Users with the `ADMIN` or `SUPER_ADMIN` role do NOT receive a `staff_profiles` record. Their data is fully contained in the `users` table.)*
 - **Enterprise Modules**: Additional models mapped for Leave Management (`leave_types`, `leave_requests`), Projects (`projects`, `project_members`, `tasks`), and `notifications`.
 
-*(Note: While the database layer strictly separates these domains, the API abstracts them transparently behind unified entities, meaning your HTTP payloads and responses remain entirely unaffected by this separation!)*
+*(Note: While the database layer strictly separates these domains, the API abstracts them transparently behind unified JSON entities, meaning your HTTP payloads and responses remain entirely unaffected by this role-based architecture separation!)*
 
 ---
 
