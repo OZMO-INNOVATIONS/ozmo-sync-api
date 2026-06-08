@@ -21,7 +21,7 @@ export class ProfileController {
 
   @Put('profile')
   async updateOwnProfile(@CurrentUser() user: RequestUser, @Body() dto: UpdateProfileDto) {
-    const data = await this.profileService.updateProfile(user.id, dto);
+    const data = await this.profileService.updateProfile(user.id, user.role, dto);
     return { message: 'Profile updated successfully', data };
   }
 

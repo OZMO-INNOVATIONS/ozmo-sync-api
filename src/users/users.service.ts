@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { AttendanceRepository, AttendanceRecord } from '../repositories/attendance.repository';
+import { AttendanceRepository, AttendanceSessionEntity } from '../repositories/attendance.repository';
 import { UserRepository } from '../repositories/user.repository';
 import { AttendanceStatsQueryDto } from './dto/attendance-stats-query.dto';
 import { ActivityQueryDto } from './dto/activity-query.dto';
@@ -24,7 +24,7 @@ export class UsersService {
     const from = new Date(Date.UTC(targetYear, 0, 1));
     const to = new Date(Date.UTC(targetYear, 11, 31, 23, 59, 59, 999));
 
-    const records = await this.attendanceRepo.findByUserIdInRange(userId, from, to);
+    const records = await this.attendanceRepo.findSessionsByUserIdInRange(userId, from, to);
 
     const currentMonth = new Date().getUTCMonth() + 1;
     const currentYear = new Date().getFullYear();
@@ -116,7 +116,7 @@ export class UsersService {
       : null;
 
     // Build activity items from attendance records
-    const allRecords = await this.attendanceRepo.findByUserId(userId);
+    const allRecords = await this.attendanceRepo.findSessionsByUserId(userId);
     const activities: {
       id: string;
       type: string;
@@ -204,12 +204,12 @@ export class UsersService {
     };
   }
 
-  private _computeStreaks(records: AttendanceRecord[]) {
+  private _computeStreaks(records: AttendanceSessionEntity[]) {
     if (records.length === 0) return { currentStreak: 0, longestStreak: 0 };
 
     // Deduplicate by date (multiple check-ins on same day count as one)
     const dates = [
-      ...new Set(records.map((r) => r.checkInTime.slice(0, 10))),
+      ...new Set(records.map((r) => r.checkInTime.includes(', ') ? r.checkInTime.split(', ')[0] : r.checkInTime.slice(0, 10))),
     ].sort((a, b) => b.localeCompare(a));
 
     let currentStreak = 0;

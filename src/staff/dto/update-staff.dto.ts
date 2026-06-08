@@ -1,10 +1,32 @@
-import { PartialType } from '@nestjs/mapped-types';
-import { IsOptional, IsEnum } from 'class-validator';
-import { CreateStaffDto } from './create-staff.dto';
-import { UserStatus } from '../../common/constants/roles.enum';
+import { IsOptional, IsEnum, IsString, IsISO8601 } from 'class-validator';
+import { Role, UserStatus } from '../../common/constants/roles.enum';
 
-export class UpdateStaffDto extends PartialType(CreateStaffDto) {
+export class UpdateStaffDto {
+  @IsOptional()
+  @IsString()
+  fullName?: string;
+
+  @IsOptional()
+  @IsString()
+  phone?: string;
+
+  @IsOptional()
+  @IsEnum(Role)
+  role?: Role;
+
+  @IsOptional()
+  @IsString()
+  department?: string;
+
+  @IsOptional()
+  @IsString()
+  designation?: string;
+
   @IsOptional()
   @IsEnum(UserStatus)
   status?: UserStatus;
+
+  @IsOptional()
+  @IsISO8601()
+  joiningDate?: string;
 }

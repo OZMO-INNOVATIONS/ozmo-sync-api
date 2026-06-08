@@ -1,16 +1,18 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { Role, InvitationStatus } from '@prisma/client';
+import { Role } from '@prisma/client';
 
 export interface InvitationEntity {
   id: string;
-  email: string;
-  role: Role;
-  token: string;
-  status: InvitationStatus;
   workspaceId: string;
-  invitedById: string;
+  invitedBy: string;
+  name: string;
+  email: string;
+  role: string;
+  tokenHash: string;
+  status: string;
   expiresAt: string;
+  acceptedAt?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -22,41 +24,44 @@ export class InvitationRepository {
   private mapToEntity(invite: any): InvitationEntity {
     return {
       id: invite.id,
+      workspaceId: invite.workspaceId,
+      invitedBy: invite.invitedBy,
+      name: invite.name,
       email: invite.email,
       role: invite.role,
-      token: invite.token,
+      tokenHash: invite.tokenHash,
       status: invite.status,
-      workspaceId: invite.workspaceId,
-      invitedById: invite.invitedById,
       expiresAt: invite.expiresAt.toISOString(),
+      acceptedAt: invite.acceptedAt ? invite.acceptedAt.toISOString() : undefined,
       createdAt: invite.createdAt.toISOString(),
       updatedAt: invite.updatedAt.toISOString(),
     };
   }
 
-  async create(dto: Omit<InvitationEntity, 'id' | 'createdAt' | 'updatedAt'>): Promise<InvitationEntity> {
+  async create(dto: Omit<InvitationEntity, 'id' | 'createdAt' | 'updatedAt' | 'acceptedAt'>): Promise<InvitationEntity> {
     const invite = await this.prisma.invitation.create({
       data: {
-        email: dto.email,
-        role: dto.role,
-        token: dto.token,
-        status: dto.status,
         workspaceId: dto.workspaceId,
-        invitedById: dto.invitedById,
+        invitedBy: dto.invitedBy,
+        name: dto.name,
+        email: dto.email.toLowerCase().trim(),
+        role: dto.role as Role,
+        tokenHash: dto.tokenHash,
+        status: dto.status,
         expiresAt: new Date(dto.expiresAt),
       },
     });
     return this.mapToEntity(invite);
   }
 
-  async findByToken(token: string): Promise<InvitationEntity | null> {
-    const invite = await this.prisma.invitation.findUnique({
-      where: { token },
+  async findByTokenHash(tokenHash: string): Promise<InvitationEntity | null> {
+    const invite = await this.prisma.invitation.findFirst({
+      where: { tokenHash },
     });
     return invite ? this.mapToEntity(invite) : null;
   }
 
-  async findByEmailAndStatus(email: string, status: InvitationStatus): Promise<InvitationEntity | null> {
+  async findByEmailAndStatus(email: string, status: string): Promise<InvitationEntity | null> {
     const invite = await this.prisma.invitation.findFirst({
       where: { email: email.toLowerCase().trim(), status },
     });
@@ -71,15 +76,42 @@ export class InvitationRepository {
     return invites.map((i) => this.mapToEntity(i));
   }
 
-  async updateStatus(id: string, status: InvitationStatus): Promise<InvitationEntity | null> {
+  async findById(id: string): Promise<InvitationEntity | null> {
+    const invite = await this.prisma.invitation.findUnique({
+      where: { id },
+    });
+    return invite ? this.mapToEntity(invite) : null;
+  }
+
+  async updateStatus(id: string, status: string, acceptedAt?: Date): Promise<InvitationEntity | null> {
     try {
       const invite = await this.prisma.invitation.update({
         where: { id },
-        data: { status },
+        data: { 
+          status,
+          ...(acceptedAt !== undefined && { acceptedAt }),
+        },
       });
       return this.mapToEntity(invite);
     } catch (e) {
       console.error('Error in InvitationRepository.updateStatus:', e);
+      return null;
+    }
+  }
+
+  async updateTokenAndExpiration(id: string, tokenHash: string, expiresAt: Date): Promise<InvitationEntity | null> {
+    try {
+      const invite = await this.prisma.invitation.update({
+        where: { id },
+        data: { 
+          tokenHash,
+          expiresAt,
+          status: 'pending',
+        },
+      });
+      return this.mapToEntity(invite);
+    } catch (e) {
+      console.error('Error in InvitationRepository.updateTokenAndExpiration:', e);
       return null;
     }
   }
