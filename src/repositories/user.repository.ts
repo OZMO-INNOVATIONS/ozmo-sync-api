@@ -236,6 +236,7 @@ export class UserRepository {
         create: {
           workspaceId: dto.workspaceId,
           employeeId: dto.employeeId,
+          email: dto.email.toLowerCase(),
           phone: dto.phone || null,
           alternatePhone: dto.alternatePhone || null,
           designation: dto.designation || null,
@@ -278,7 +279,10 @@ export class UserRepository {
       const userUpdate: any = {};
       const profileUpdate: any = {};
 
-      if (updates.email) userUpdate.email = updates.email.toLowerCase();
+      if (updates.email) {
+        userUpdate.email = updates.email.toLowerCase();
+        profileUpdate.email = updates.email.toLowerCase();
+      }
       if (updates.password) userUpdate.password = updates.password;
       if (updates.role) userUpdate.role = updates.role;
       if (updates.status) userUpdate.status = updates.status;
@@ -321,6 +325,7 @@ export class UserRepository {
               ...profileUpdate,
               workspaceId: existing.workspaceId,
               employeeId: profileUpdate.employeeId || existing.staffProfile?.employeeId || `EMP-${Date.now()}`,
+              email: profileUpdate.email || existing.email,
             },
             update: profileUpdate,
           }

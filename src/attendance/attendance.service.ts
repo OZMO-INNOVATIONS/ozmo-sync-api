@@ -248,6 +248,25 @@ export class AttendanceService {
     return this._formatDailySummaryResponse(sessions, summary);
   }
 
+  async getStatus(userId: string) {
+    const openSession = await this.attendanceRepo.findOpenSession(userId);
+    if (openSession) {
+      return {
+        isCheckedIn: true,
+        session: {
+          id: openSession.id,
+          checkInTime: openSession.checkInTime,
+          location: openSession.location,
+        },
+      };
+    }
+    
+    return {
+      isCheckedIn: false,
+      session: null,
+    };
+  }
+
   async getAttendanceHistory(userId: string, query: AttendanceQueryDto) {
     const { from, to } = this._resolveRange(query);
 

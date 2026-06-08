@@ -47,6 +47,12 @@ export class AttendanceController {
     return { message: 'Today attendance fetched', data };
   }
 
+  @Get('status')
+  async getStatus(@CurrentUser() user: RequestUser) {
+    const data = await this.attendanceService.getStatus(user.id);
+    return { message: 'Attendance status fetched', data };
+  }
+
   @Get('history')
   async getMyAttendance(
     @CurrentUser() user: RequestUser,

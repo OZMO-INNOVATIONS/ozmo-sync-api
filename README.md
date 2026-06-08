@@ -216,7 +216,9 @@ RBAC is enforced via `@Roles()` decorator + `RolesGuard` at the controller level
 
 ## API Documentation
 
-**Base URL:** `http://localhost:4000/api/v1`
+**Base URL:** 
+- Local: `http://localhost:4000/api/v1`
+- Live: `https://ozmo-sync-api.onrender.com/api/v1`
 
 ---
 
@@ -274,6 +276,7 @@ To ensure consistent and readable time presentation across clients (such as mobi
 | `GET`    | `/users`                        | JWT + Roles | `ADMIN` `HR` `MANAGER`             |
 | `GET`    | `/users/:id`                    | JWT + Roles | `ADMIN` `HR` `MANAGER`             |
 | `DELETE` | `/users/:id`                    | JWT + Roles | `ADMIN`                            |
+| `GET`    | `/attendance/status`            | JWT         | Any                                |
 | `POST`   | `/attendance/check-in`          | JWT + Roles | `STAFF` `TEAM_LEAD`                |
 | `POST`   | `/attendance/check-out`         | JWT + Roles | `STAFF` `TEAM_LEAD`                |
 | `GET`    | `/attendance/my`                | JWT         | Any                                |
@@ -827,6 +830,37 @@ curl -X DELETE http://localhost:4000/api/v1/users/3f2e1a4b-... \
 ---
 
 ### Attendance
+
+#### Get Current Status
+
+**`GET /api/v1/attendance/status`** — Auth: Bearer token | Roles: Any
+
+Returns the live check-in status of the authenticated user. Useful for determining whether to show a "Check In" or "Check Out" button.
+
+```bash
+curl http://localhost:4000/api/v1/attendance/status \
+  -H "Authorization: Bearer <ACCESS_TOKEN>"
+```
+
+##### Response — `200 OK`
+
+```json
+{
+  "success": true,
+  "message": "Attendance status fetched",
+  "data": {
+    "isCheckedIn": true,
+    "session": {
+      "id": "clxtk...",
+      "checkInTime": "2026-06-07T19:07:43.926Z",
+      "location": "office"
+    }
+  },
+  "timestamp": "2026-06-07T19:07:45.000Z"
+}
+```
+
+---
 
 #### Check In
 

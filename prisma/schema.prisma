@@ -42,6 +42,7 @@ model StaffProfile {
   userId                 String    @unique @map("user_id") @db.Uuid
   workspaceId            String    @map("workspace_id") @db.Uuid
   employeeId             String    @unique @map("employee_id") @db.VarChar(30)
+  email                  String?   @db.VarChar(255)
   phone                  String?   @db.VarChar(30)
   alternatePhone         String?   @map("alternate_phone") @db.VarChar(30)
   designation            String?   @db.VarChar(100)
