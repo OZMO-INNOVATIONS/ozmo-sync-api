@@ -49,6 +49,13 @@ Enterprise-grade Staff Management & Attendance Tracking REST API built with **Ne
   - [Dashboard](#dashboard)
     - [Get Admin Dashboard](#get-admin-dashboard)
     - [Get Staff Dashboard](#get-staff-dashboard)
+  - [Meetings](#meetings)
+    - [Fetch All Meetings](#fetch-all-meetings)
+    - [Create Meeting](#create-meeting)
+  - [Leave Management](#leave-management)
+    - [Fetch All Leaves](#fetch-all-leaves)
+    - [Submit Leave Request](#submit-leave-request)
+    - [Update Leave Status](#update-leave-status)
 - [Error Responses](#error-responses)
 - [HTTP Status Codes](#http-status-codes)
 
@@ -1554,6 +1561,324 @@ Retrieve personal workspace statistics for the currently authenticated staff mem
 ```bash
 curl http://localhost:4000/api/v1/dashboard/staff \
   -H "Authorization: Bearer <ACCESS_TOKEN>"
+```
+
+---
+
+### Meetings
+
+#### Fetch All Meetings
+
+**`GET /api/v1/meetings`** — Auth: Bearer token | Roles: Any
+
+##### Response — `200 OK`
+
+```json
+{
+  "success": true,
+  "message": "Meetings fetched successfully",
+  "data": [
+    {
+      "id": "meet_001",
+      "workspaceId": "790cb3f8-bcac-444c-9c79-f66dc33f9818",
+      "title": "Sprint Planning & Standup",
+      "description": "Aligning on deliverables and tasks for current sprint.",
+      "dateTime": "2026-06-09T09:30:00.000Z",
+      "link": "https://meet.google.com/abc-defg-hij",
+      "duration": "30 mins",
+      "createdAt": "2026-06-09T09:30:00.000Z",
+      "updatedAt": "2026-06-09T09:30:00.000Z"
+    }
+  ],
+  "timestamp": "2026-06-09T14:30:00.000Z"
+}
+```
+
+```bash
+curl http://localhost:4000/api/v1/meetings \
+  -H "Authorization: Bearer <ACCESS_TOKEN>"
+```
+
+---
+
+#### Create Meeting
+
+**`POST /api/v1/meetings`** — Auth: Bearer token | Roles: `ADMIN` `SUPER_ADMIN` `HR` `MANAGER`
+
+##### Request Body
+
+| Field | Type | Required | Description |
+| --- | --- | :---: | --- |
+| `id` | string | No | Optional custom ID (e.g. `meet_002`) |
+| `title` | string | Yes | Meeting title |
+| `description` | string | No | Meeting description |
+| `dateTime` | string | Yes | ISO 8601 Date/Time string |
+| `link` | string | Yes | Meeting URL link |
+| `duration` | string | Yes | Meeting duration (e.g. `45 mins`) |
+
+```json
+{
+  "id": "meet_002",
+  "title": "Client Progress Review",
+  "description": "Weekly alignment sync with clients.",
+  "dateTime": "2026-06-10T15:00:00.000Z",
+  "link": "https://meet.google.com/xyz-uvwx-123",
+  "duration": "45 mins"
+}
+```
+
+##### Response — `201 Created`
+
+```json
+{
+  "success": true,
+  "message": "Meeting created successfully",
+  "data": {
+    "id": "meet_002",
+    "workspaceId": "790cb3f8-bcac-444c-9c79-f66dc33f9818",
+    "title": "Client Progress Review",
+    "description": "Weekly alignment sync with clients.",
+    "dateTime": "2026-06-10T15:00:00.000Z",
+    "link": "https://meet.google.com/xyz-uvwx-123",
+    "duration": "45 mins",
+    "createdAt": "2026-06-09T15:35:00.000Z",
+    "updatedAt": "2026-06-09T15:35:00.000Z"
+  },
+  "timestamp": "2026-06-09T15:35:00.000Z"
+}
+```
+
+```bash
+curl -X POST http://localhost:4000/api/v1/meetings \
+  -H "Authorization: Bearer <ACCESS_TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "id": "meet_002",
+    "title": "Client Progress Review",
+    "description": "Weekly alignment sync with clients.",
+    "dateTime": "2026-06-10T15:00:00.000Z",
+    "link": "https://meet.google.com/xyz-uvwx-123",
+    "duration": "45 mins"
+  }'
+```
+
+---
+
+### Leave Management
+
+#### Fetch All Leaves
+
+**`GET /api/v1/leaves`** — Auth: Bearer token | Roles: Any (Staff gets own leaves, Admin/HR/Manager/Team Lead gets all leaves in workspace)
+
+##### Response — `200 OK`
+
+```json
+{
+  "success": true,
+  "message": "Leaves fetched successfully",
+  "data": [
+    {
+      "id": "lv_101",
+      "workspaceId": "790cb3f8-bcac-444c-9c79-f66dc33f9818",
+      "userId": "3f2e1a4b-...",
+      "employeeId": "emp_001",
+      "employeeName": "Arjun Mehta",
+      "department": "Tech Division",
+      "teamId": "team_tech",
+      "category": "casual",
+      "priority": "normal",
+      "startDate": "2026-06-12T00:00:00.000Z",
+      "endDate": "2026-06-14T00:00:00.000Z",
+      "days": 3,
+      "reason": "Urgent family event",
+      "hasAttachment": false,
+      "status": "pending",
+      "impactLevel": "low",
+      "coverageStatus": "none",
+      "teamLeadNote": "",
+      "approvedBy": null,
+      "rejectionReason": null,
+      "reviewedAt": null,
+      "appliedAt": "2026-06-09T14:30:00.000Z",
+      "createdAt": "2026-06-09T14:30:00.000Z",
+      "updatedAt": "2026-06-09T14:30:00.000Z"
+    }
+  ],
+  "timestamp": "2026-06-09T14:30:00.000Z"
+}
+```
+
+```bash
+curl http://localhost:4000/api/v1/leaves \
+  -H "Authorization: Bearer <ACCESS_TOKEN>"
+```
+
+---
+
+#### Submit Leave Request
+
+**`POST /api/v1/leaves`** — Auth: Bearer token | Roles: Any
+
+##### Request Body
+
+| Field | Type | Required | Description |
+| --- | --- | :---: | --- |
+| `id` | string | No | Optional custom ID (e.g. `lv_102`) |
+| `employeeId` | string | Yes | Staff member's employee ID |
+| `employeeName` | string | Yes | Staff member's full name |
+| `department` | string | No | Department name |
+| `teamId` | string | No | Team ID |
+| `category` | string | Yes | Leave category (`casual`, `sick`, `paid`, `compOff`, `wfh`, `halfDay`) |
+| `priority` | string | Yes | Priority level (`low`, `normal`, `high`, `urgent`) |
+| `startDate` | string | Yes | ISO 8601 Date string |
+| `endDate` | string | Yes | ISO 8601 Date string |
+| `days` | number | Yes | Total days |
+| `reason` | string | Yes | Leave reason |
+| `hasAttachment` | boolean | No | Whether an attachment is included |
+| `status` | string | No | Defaults to `pending` |
+| `impactLevel` | string | No | Defaults to `low` |
+| `coverageStatus` | string | No | Defaults to `none` |
+| `teamLeadNote` | string | No | Optional note |
+
+```json
+{
+  "id": "lv_102",
+  "employeeId": "emp_001",
+  "employeeName": "Arjun Mehta",
+  "department": "Tech Division",
+  "teamId": "team_tech",
+  "category": "sick",
+  "priority": "high",
+  "startDate": "2026-06-15T00:00:00.000Z",
+  "endDate": "2026-06-15T00:00:00.000Z",
+  "days": 1,
+  "reason": "Doctor appointment",
+  "hasAttachment": false
+}
+```
+
+##### Response — `201 Created`
+
+```json
+{
+  "success": true,
+  "message": "Leave request submitted successfully",
+  "data": {
+    "id": "lv_102",
+    "workspaceId": "790cb3f8-bcac-444c-9c79-f66dc33f9818",
+    "userId": "9a6c910a-bd46-4aa2-b459-f21c0f6c5bfc",
+    "employeeId": "emp_001",
+    "employeeName": "Arjun Mehta",
+    "department": "Tech Division",
+    "teamId": "team_tech",
+    "category": "sick",
+    "priority": "high",
+    "startDate": "2026-06-15T00:00:00.000Z",
+    "endDate": "2026-06-15T00:00:00.000Z",
+    "days": 1,
+    "reason": "Doctor appointment",
+    "hasAttachment": false,
+    "status": "pending",
+    "impactLevel": "low",
+    "coverageStatus": "none",
+    "teamLeadNote": "",
+    "approvedBy": null,
+    "rejectionReason": null,
+    "reviewedAt": null,
+    "appliedAt": "2026-06-09T15:35:00.000Z",
+    "createdAt": "2026-06-09T15:35:00.000Z",
+    "updatedAt": "2026-06-09T15:35:00.000Z"
+  },
+  "timestamp": "2026-06-09T15:35:00.000Z"
+}
+```
+
+```bash
+curl -X POST http://localhost:4000/api/v1/leaves \
+  -H "Authorization: Bearer <ACCESS_TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "id": "lv_102",
+    "employeeId": "emp_001",
+    "employeeName": "Arjun Mehta",
+    "department": "Tech Division",
+    "teamId": "team_tech",
+    "category": "sick",
+    "priority": "high",
+    "startDate": "2026-06-15T00:00:00.000Z",
+    "endDate": "2026-06-15T00:00:00.000Z",
+    "days": 1,
+    "reason": "Doctor appointment",
+    "hasAttachment": false
+  }'
+```
+
+---
+
+#### Update Leave Status
+
+**`PUT /api/v1/leaves/:id/status`** — Auth: Bearer token | Roles: `ADMIN` `SUPER_ADMIN` `HR` `MANAGER` `TEAM_LEAD`
+
+##### Request Body (Option A: Approve)
+
+```json
+{
+  "status": "APPROVED",
+  "approvedBy": "Admin Name"
+}
+```
+
+##### Request Body (Option B: Reject)
+
+```json
+{
+  "status": "REJECTED",
+  "rejectedBy": "Admin Name",
+  "rejectionReason": "Project release critical phase coverage needed"
+}
+```
+
+##### Response — `200 OK`
+
+```json
+{
+  "success": true,
+  "message": "Leave status updated successfully",
+  "data": {
+    "id": "lv_102",
+    "workspaceId": "790cb3f8-bcac-444c-9c79-f66dc33f9818",
+    "userId": "9a6c910a-bd46-4aa2-b459-f21c0f6c5bfc",
+    "employeeId": "emp_001",
+    "employeeName": "Arjun Mehta",
+    "department": "Tech Division",
+    "teamId": "team_tech",
+    "category": "sick",
+    "priority": "high",
+    "startDate": "2026-06-15T00:00:00.000Z",
+    "endDate": "2026-06-15T00:00:00.000Z",
+    "days": 1,
+    "reason": "Doctor appointment",
+    "hasAttachment": false,
+    "status": "approved",
+    "impactLevel": "low",
+    "coverageStatus": "none",
+    "teamLeadNote": "",
+    "approvedBy": "Admin Name",
+    "rejectionReason": null,
+    "reviewedAt": "2026-06-09T15:35:00.000Z",
+    "appliedAt": "2026-06-09T15:35:00.000Z",
+    "createdAt": "2026-06-09T15:35:00.000Z",
+    "updatedAt": "2026-06-09T15:35:00.000Z"
+  },
+  "timestamp": "2026-06-09T15:35:00.000Z"
+}
+```
+
+```bash
+curl -X PUT http://localhost:4000/api/v1/leaves/lv_102/status \
+  -H "Authorization: Bearer <ACCESS_TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{"status":"APPROVED","approvedBy":"Admin Name"}'
 ```
 
 ---

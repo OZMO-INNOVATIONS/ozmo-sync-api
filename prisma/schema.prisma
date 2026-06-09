@@ -269,33 +269,45 @@ model Invitation {
 }
 
 model LeaveType {
-  id          String         @id @default(uuid()) @db.Uuid
-  workspaceId String         @map("workspace_id") @db.Uuid
-  name        String         @db.VarChar(100)
-  description String?        @db.Text
-  daysAllowed Int            @map("days_allowed")
-  isPaid      Boolean        @default(true) @map("is_paid")
-  createdAt   DateTime       @default(now()) @map("created_at")
-  updatedAt   DateTime       @updatedAt @map("updated_at")
-  requests    LeaveRequest[]
+  id          String    @id @default(uuid()) @db.Uuid
+  workspaceId String    @map("workspace_id") @db.Uuid
+  name        String    @db.VarChar(100)
+  description String?   @db.Text
+  daysAllowed Int       @map("days_allowed")
+  isPaid      Boolean   @default(true) @map("is_paid")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
 
   @@map("leave_types")
 }
 
 model LeaveRequest {
-  id          String      @id @default(uuid()) @db.Uuid
-  workspaceId String      @map("workspace_id") @db.Uuid
-  userId      String      @map("user_id") @db.Uuid
-  leaveTypeId String      @map("leave_type_id") @db.Uuid
-  startDate   DateTime    @map("start_date") @db.Date
-  endDate     DateTime    @map("end_date") @db.Date
-  reason      String      @db.Text
-  status      LeaveStatus @default(PENDING)
-  createdAt   DateTime    @default(now()) @map("created_at")
-  updatedAt   DateTime    @updatedAt @map("updated_at")
+  id              String    @id @default(uuid()) @db.VarChar(255)
+  workspaceId     String    @map("workspace_id") @db.Uuid
+  userId          String    @map("user_id") @db.Uuid
+  employeeId      String    @map("employee_id") @db.VarChar(100)
+  employeeName    String    @map("employee_name") @db.VarChar(255)
+  department      String?   @db.VarChar(255)
+  teamId          String?   @map("team_id") @db.VarChar(100)
+  category        String    @db.VarChar(100)
+  priority        String    @db.VarChar(100)
+  startDate       DateTime  @map("start_date") @db.Timestamptz(6)
+  endDate         DateTime  @map("end_date") @db.Timestamptz(6)
+  days            Float
+  reason          String    @db.Text
+  hasAttachment   Boolean   @default(false) @map("has_attachment")
+  status          String    @default("pending") @db.VarChar(100)
+  impactLevel     String    @default("low") @map("impact_level") @db.VarChar(100)
+  coverageStatus  String    @default("none") @map("coverage_status") @db.VarChar(100)
+  teamLeadNote    String?   @default("") @map("team_lead_note") @db.Text
+  approvedBy      String?   @map("approved_by") @db.VarChar(255)
+  rejectionReason String?   @map("rejection_reason") @db.Text
+  reviewedAt      DateTime? @map("reviewed_at") @db.Timestamptz(6)
+  appliedAt       DateTime  @default(now()) @map("applied_at") @db.Timestamptz(6)
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
 
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  leaveType LeaveType @relation(fields: [leaveTypeId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([workspaceId])
@@ -482,4 +494,19 @@ enum TaskPriority {
   MEDIUM
   HIGH
   URGENT
+}
+
+model Meeting {
+  id          String   @id @default(uuid()) @db.VarChar(255)
+  workspaceId String   @map("workspace_id") @db.Uuid
+  title       String   @db.VarChar(255)
+  description String?  @db.Text
+  dateTime    DateTime @map("date_time") @db.Timestamptz(6)
+  link        String   @db.Text
+  duration    String   @db.VarChar(50)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([workspaceId])
+  @@map("meetings")
 }
