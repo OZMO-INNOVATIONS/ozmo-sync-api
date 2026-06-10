@@ -1,39 +1,37 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { Role, UserStatus } from '../common/constants/roles.enum';
-import { formatDate, formatDateTime } from '../common/utils/date-format.util';
 
 export interface UserEntity {
   id: string;
-  employeeId: string;
-  fullName: string;
+  employeeId?: string;
   firstName?: string;
   lastName?: string;
   email: string;
-  password: string;
   phone?: string;
-  role: Role;
-  designation?: string;
-  department?: string;
-  joiningDate?: string;
-  status: UserStatus;
-  createdAt: string;
-  refreshToken: string | null;
-  workspaceId: string;
-  workspaceName?: string;
+  password?: string;
+  profilePhoto?: string;
   isFirstLogin: boolean;
-  passwordChangedAt?: string;
+  status: UserStatus;
+  role: Role;
+  lastLogin?: Date;
+  createdAt: Date;
+  updatedAt: Date;
+  deletedAt?: Date;
   createdBy?: string;
-  deletedAt?: string;
+  updatedBy?: string;
+  workspaceId?: string;
 
   // Profile fields
-  profileImage?: string;
   alternatePhone?: string;
+  designation?: string;
+  department?: string;
+  reportingManagerId?: string;
+  joiningDate?: Date;
+  employmentType?: string;
+  salary?: number;
   gender?: string;
-  dateOfBirth?: string;
-  bloodGroup?: string;
-  maritalStatus?: string;
-  nationality?: string;
+  dateOfBirth?: Date;
   address?: string;
   city?: string;
   state?: string;
@@ -42,15 +40,13 @@ export interface UserEntity {
   emergencyContactName?: string;
   emergencyContactNumber?: string;
   emergencyContactRelation?: string;
-  departmentId?: string;
-  designationId?: string;
-  probationEndDate?: string;
-  reportingManagerId?: string;
-  employmentType?: string;
+  bloodGroup?: string;
+  maritalStatus?: string;
+  nationality?: string;
+  probationEndDate?: Date;
   workLocation?: string;
-  salary?: number;
   bio?: string;
-  lastLogin?: string;
+  passwordChangedAt?: Date;
 }
 
 @Injectable()
@@ -58,92 +54,86 @@ export class UserRepository {
   constructor(private readonly prisma: PrismaService) {}
 
   private mapToEntity(user: any): UserEntity {
-    const profile = user.staffProfile || {};
-    const firstName = user.firstName || '';
-    const lastName = user.lastName || '';
-    const fullName = `${firstName} ${lastName}`.trim();
-
     return {
       id: user.id,
-      employeeId: profile.employeeId || '',
-      fullName,
-      firstName: firstName || undefined,
-      lastName: lastName || undefined,
+      employeeId: user.employeeId ?? undefined,
+      firstName: user.firstName ?? undefined,
+      lastName: user.lastName ?? undefined,
       email: user.email,
       password: user.password,
-      phone: profile.phone || undefined,
-      role: user.role as Role,
-      designation: profile.designation || undefined,
-      department: profile.department || undefined,
-      joiningDate: profile.joiningDate ? (formatDate(profile.joiningDate) ?? undefined) : undefined,
+      phone: user.phone ?? undefined,
+      profilePhoto: user.profilePhoto ?? undefined,
+      isFirstLogin: user.isFirstLogin,
       status: user.status as UserStatus,
-      createdAt: formatDateTime(user.createdAt) ?? user.createdAt.toISOString(),
-      refreshToken: user.refreshToken,
-      workspaceId: user.workspaceId,
-      workspaceName: user.workspaceName || undefined,
-      isFirstLogin: profile.isFirstLogin ?? true,
-      passwordChangedAt: profile.passwordChangedAt ? (formatDateTime(profile.passwordChangedAt) ?? undefined) : undefined,
-      createdBy: user.createdBy || undefined,
-      deletedAt: profile.deletedAt ? (formatDateTime(profile.deletedAt) ?? undefined) : undefined,
+      role: user.role as Role,
+      lastLogin: user.lastLogin ?? undefined,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
+      deletedAt: user.deletedAt ?? undefined,
+      createdBy: user.createdBy ?? undefined,
+      updatedBy: user.updatedBy ?? undefined,
+      workspaceId: user.workspaceId ?? undefined,
 
-      // Profile fields
-      profileImage: profile.profileImage || undefined,
-      alternatePhone: profile.alternatePhone || undefined,
-      gender: profile.gender || undefined,
-      dateOfBirth: profile.dateOfBirth ? (formatDate(profile.dateOfBirth) ?? undefined) : undefined,
-      bloodGroup: profile.bloodGroup || undefined,
-      maritalStatus: profile.maritalStatus || undefined,
-      nationality: profile.nationality || undefined,
-      address: profile.address || undefined,
-      city: profile.city || undefined,
-      state: profile.state || undefined,
-      country: profile.country || undefined,
-      postalCode: profile.postalCode || undefined,
-      emergencyContactName: profile.emergencyContactName || undefined,
-      emergencyContactNumber: profile.emergencyContactNumber || undefined,
-      emergencyContactRelation: profile.emergencyContactRelation || undefined,
-      departmentId: profile.departmentId || undefined,
-      designationId: profile.designationId || undefined,
-      probationEndDate: profile.probationEndDate ? (formatDate(profile.probationEndDate) ?? undefined) : undefined,
-      reportingManagerId: profile.reportingManagerId || undefined,
-      employmentType: profile.employmentType || undefined,
-      workLocation: profile.workLocation || undefined,
-      salary: profile.salary ? Number(profile.salary) : undefined,
-      bio: profile.bio || undefined,
-      lastLogin: user.lastLogin ? (formatDateTime(user.lastLogin) ?? undefined) : undefined,
+      alternatePhone: user.alternatePhone ?? undefined,
+      designation: user.designation ?? undefined,
+      department: user.department ?? undefined,
+      reportingManagerId: user.reportingManagerId ?? undefined,
+      joiningDate: user.joiningDate ?? undefined,
+      employmentType: user.employmentType ?? undefined,
+      salary: user.salary ? Number(user.salary) : undefined,
+      gender: user.gender ?? undefined,
+      dateOfBirth: user.dateOfBirth ?? undefined,
+      address: user.address ?? undefined,
+      city: user.city ?? undefined,
+      state: user.state ?? undefined,
+      country: user.country ?? undefined,
+      postalCode: user.postalCode ?? undefined,
+      emergencyContactName: user.emergencyContactName ?? undefined,
+      emergencyContactNumber: user.emergencyContactNumber ?? undefined,
+      emergencyContactRelation: user.emergencyContactRelation ?? undefined,
+      bloodGroup: user.bloodGroup ?? undefined,
+      maritalStatus: user.maritalStatus ?? undefined,
+      nationality: user.nationality ?? undefined,
+      probationEndDate: user.probationEndDate ?? undefined,
+      workLocation: user.workLocation ?? undefined,
+      bio: user.bio ?? undefined,
+      passwordChangedAt: user.passwordChangedAt ?? undefined,
     };
   }
 
   async findAll(): Promise<UserEntity[]> {
     const users = await this.prisma.user.findMany({
-      where: {
-        OR: [{ staffProfile: null }, { staffProfile: { deletedAt: null } }]
-      },
-      include: { staffProfile: true },
+      where: { deletedAt: null },
     });
     return users.map((u) => this.mapToEntity(u));
   }
 
   async findFilteredPaged(
-    where: { department?: string; status?: UserStatus; role?: Role; search?: string },
+    where: { status?: UserStatus; search?: string; workspaceId?: string; department?: string; role?: Role },
     options: { page?: number; limit?: number; sort?: string }
   ): Promise<UserEntity[]> {
     const page = options.page || 1;
     const limit = options.limit || 20;
     const skip = (page - 1) * limit;
 
-    const filterWhere: any = {
-      OR: [{ staffProfile: null }, { staffProfile: { deletedAt: null } }]
-    };
+    const filterWhere: any = { deletedAt: null };
 
-    if (where.department) {
-      filterWhere.staffProfile = { ...filterWhere.staffProfile, department: where.department };
-    }
     if (where.status) {
       filterWhere.status = where.status;
     }
     if (where.role) {
       filterWhere.role = where.role;
+    }
+    if (where.department) {
+      filterWhere.department = where.department;
+    }
+    if (where.workspaceId) {
+      filterWhere.memberships = {
+        some: {
+          workspaceId: where.workspaceId,
+          deletedAt: null,
+        },
+      };
     }
 
     if (where.search) {
@@ -155,17 +145,15 @@ export class UserRepository {
             { email: { contains: q, mode: 'insensitive' } },
             { firstName: { contains: q, mode: 'insensitive' } },
             { lastName: { contains: q, mode: 'insensitive' } },
-            { staffProfile: { employeeId: { contains: q, mode: 'insensitive' } } },
-          ]
-        }
+            { employeeId: { contains: q, mode: 'insensitive' } },
+          ],
+        },
       ];
     }
 
     const orderBy: any = [];
     if (options.sort === 'name') {
       orderBy.push({ firstName: 'asc' });
-    } else if (options.sort === 'joiningDate') {
-      orderBy.push({ staffProfile: { joiningDate: 'asc' } });
     } else {
       orderBy.push({ createdAt: 'desc' });
     }
@@ -175,167 +163,126 @@ export class UserRepository {
       orderBy,
       skip,
       take: limit,
-      include: { staffProfile: true },
     });
     return users.map((u) => this.mapToEntity(u));
   }
 
   async findById(id: string): Promise<UserEntity | null> {
+    const isUuid = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(id);
+    if (!isUuid) {
+      return this.findByEmployeeId(id);
+    }
     const user = await this.prisma.user.findFirst({
-      where: {
-        id,
-        OR: [{ staffProfile: null }, { staffProfile: { deletedAt: null } }]
-      },
-      include: { staffProfile: true },
+      where: { id, deletedAt: null },
     });
     return user ? this.mapToEntity(user) : null;
   }
 
   async findByEmail(email: string): Promise<UserEntity | null> {
-    const normalized = email.toLowerCase();
+    const normalized = email.toLowerCase().trim();
     const user = await this.prisma.user.findFirst({
-      where: {
-        email: normalized,
-        OR: [{ staffProfile: null }, { staffProfile: { deletedAt: null } }]
-      },
-      include: { staffProfile: true },
+      where: { email: normalized, deletedAt: null },
     });
     return user ? this.mapToEntity(user) : null;
   }
 
   async findByEmployeeId(employeeId: string): Promise<UserEntity | null> {
     const user = await this.prisma.user.findFirst({
-      where: {
-        staffProfile: {
-          employeeId,
-          deletedAt: null
-        }
-      },
-      include: { staffProfile: true },
+      where: { employeeId, deletedAt: null },
     });
     return user ? this.mapToEntity(user) : null;
   }
 
-  async create(dto: Omit<UserEntity, 'id' | 'createdAt'>): Promise<UserEntity> {
-    const isNoProfileRole = dto.role === Role.ADMIN || dto.role === Role.SUPER_ADMIN;
-
-    const data: any = {
-      email: dto.email.toLowerCase(),
-      password: dto.password,
-      role: dto.role,
-      status: dto.status,
-      refreshToken: dto.refreshToken,
-      workspaceId: dto.workspaceId,
-      firstName: dto.firstName || null,
-      lastName: dto.lastName || null,
-      lastLogin: dto.lastLogin ? new Date(dto.lastLogin) : null,
-    };
-
-    if (!isNoProfileRole) {
-      data.staffProfile = {
-        create: {
-          workspaceId: dto.workspaceId,
-          employeeId: dto.employeeId,
-          email: dto.email.toLowerCase(),
-          phone: dto.phone || null,
-          alternatePhone: dto.alternatePhone || null,
-          designation: dto.designation || null,
-          department: dto.department || null,
-          joiningDate: dto.joiningDate ? new Date(dto.joiningDate) : null,
-          employmentType: dto.employmentType || null,
-          salary: dto.salary ? Number(dto.salary) : null,
-          gender: dto.gender || null,
-          dateOfBirth: dto.dateOfBirth ? new Date(dto.dateOfBirth) : null,
-          address: dto.address || null,
-          city: dto.city || null,
-          state: dto.state || null,
-          country: dto.country || null,
-          postalCode: dto.postalCode || null,
-          emergencyContactName: dto.emergencyContactName || null,
-          emergencyContactNumber: dto.emergencyContactNumber || null,
-          profileImage: dto.profileImage || null,
-          isFirstLogin: dto.isFirstLogin ?? true,
-          passwordChangedAt: dto.passwordChangedAt ? new Date(dto.passwordChangedAt) : null,
-          reportingManagerId: dto.reportingManagerId || null,
-        }
-      };
-    }
-
+  async create(dto: Partial<UserEntity> & { email: string; password?: string }): Promise<UserEntity> {
     const user = await this.prisma.user.create({
-      data,
-      include: { staffProfile: true },
+      data: {
+        email: dto.email.toLowerCase().trim(),
+        password: dto.password || '',
+        firstName: dto.firstName,
+        lastName: dto.lastName,
+        phone: dto.phone,
+        profilePhoto: dto.profilePhoto,
+        isFirstLogin: dto.isFirstLogin ?? true,
+        status: (dto.status as any) ?? UserStatus.ACTIVE,
+        role: (dto.role as any) ?? Role.STAFF,
+        employeeId: dto.employeeId,
+        workspaceId: dto.workspaceId,
+        createdBy: dto.createdBy,
+
+        alternatePhone: dto.alternatePhone,
+        designation: dto.designation,
+        department: dto.department,
+        reportingManagerId: dto.reportingManagerId,
+        joiningDate: dto.joiningDate,
+        employmentType: dto.employmentType,
+        salary: dto.salary,
+        gender: dto.gender,
+        dateOfBirth: dto.dateOfBirth,
+        address: dto.address,
+        city: dto.city,
+        state: dto.state,
+        country: dto.country,
+        postalCode: dto.postalCode,
+        emergencyContactName: dto.emergencyContactName,
+        emergencyContactNumber: dto.emergencyContactNumber,
+        emergencyContactRelation: dto.emergencyContactRelation,
+        bloodGroup: dto.bloodGroup,
+        maritalStatus: dto.maritalStatus,
+        nationality: dto.nationality,
+        probationEndDate: dto.probationEndDate,
+        workLocation: dto.workLocation,
+        bio: dto.bio,
+      },
     });
     return this.mapToEntity(user);
   }
 
   async updateById(id: string, updates: Partial<UserEntity>): Promise<UserEntity | null> {
     try {
-      const existing = await this.prisma.user.findUnique({
-        where: { id },
-        include: { staffProfile: true },
-      });
-      if (!existing) return null;
+      const data: any = {};
+      if (updates.email) data.email = updates.email.toLowerCase().trim();
+      if (updates.password) data.password = updates.password;
+      if (updates.firstName !== undefined) data.firstName = updates.firstName;
+      if (updates.lastName !== undefined) data.lastName = updates.lastName;
+      if (updates.phone !== undefined) data.phone = updates.phone;
+      if (updates.profilePhoto !== undefined) data.profilePhoto = updates.profilePhoto;
+      if (updates.isFirstLogin !== undefined) data.isFirstLogin = updates.isFirstLogin;
+      if (updates.status !== undefined) data.status = updates.status;
+      if (updates.role !== undefined) data.role = updates.role;
+      if (updates.lastLogin !== undefined) data.lastLogin = updates.lastLogin;
+      if (updates.employeeId !== undefined) data.employeeId = updates.employeeId;
+      if (updates.workspaceId !== undefined) data.workspaceId = updates.workspaceId;
+      if (updates.updatedBy !== undefined) data.updatedBy = updates.updatedBy;
+      if (updates.deletedAt !== undefined) data.deletedAt = updates.deletedAt;
 
-      const userUpdate: any = {};
-      const profileUpdate: any = {};
-
-      if (updates.email) {
-        userUpdate.email = updates.email.toLowerCase();
-        profileUpdate.email = updates.email.toLowerCase();
-      }
-      if (updates.password) userUpdate.password = updates.password;
-      if (updates.role) userUpdate.role = updates.role;
-      if (updates.status) userUpdate.status = updates.status;
-      if (updates.refreshToken !== undefined) userUpdate.refreshToken = updates.refreshToken;
-      if (updates.lastLogin !== undefined) userUpdate.lastLogin = updates.lastLogin ? new Date(updates.lastLogin) : null;
-      if (updates.workspaceId) userUpdate.workspaceId = updates.workspaceId;
-      if (updates.firstName !== undefined) userUpdate.firstName = updates.firstName;
-      if (updates.lastName !== undefined) userUpdate.lastName = updates.lastName;
-
-      if (updates.employeeId !== undefined) profileUpdate.employeeId = updates.employeeId;
-      if (updates.phone !== undefined) profileUpdate.phone = updates.phone;
-      if (updates.alternatePhone !== undefined) profileUpdate.alternatePhone = updates.alternatePhone;
-      if (updates.designation !== undefined) profileUpdate.designation = updates.designation;
-      if (updates.department !== undefined) profileUpdate.department = updates.department;
-      if (updates.joiningDate !== undefined) profileUpdate.joiningDate = updates.joiningDate ? new Date(updates.joiningDate) : null;
-      if (updates.employmentType !== undefined) profileUpdate.employmentType = updates.employmentType;
-      if (updates.salary !== undefined) profileUpdate.salary = updates.salary ? Number(updates.salary) : null;
-      if (updates.gender !== undefined) profileUpdate.gender = updates.gender;
-      if (updates.dateOfBirth !== undefined) profileUpdate.dateOfBirth = updates.dateOfBirth ? new Date(updates.dateOfBirth) : null;
-      if (updates.address !== undefined) profileUpdate.address = updates.address;
-      if (updates.city !== undefined) profileUpdate.city = updates.city;
-      if (updates.state !== undefined) profileUpdate.state = updates.state;
-      if (updates.country !== undefined) profileUpdate.country = updates.country;
-      if (updates.postalCode !== undefined) profileUpdate.postalCode = updates.postalCode;
-      if (updates.emergencyContactName !== undefined) profileUpdate.emergencyContactName = updates.emergencyContactName;
-      if (updates.emergencyContactNumber !== undefined) profileUpdate.emergencyContactNumber = updates.emergencyContactNumber;
-      if (updates.profileImage !== undefined) profileUpdate.profileImage = updates.profileImage;
-      if (updates.isFirstLogin !== undefined) profileUpdate.isFirstLogin = updates.isFirstLogin;
-      if (updates.passwordChangedAt !== undefined) profileUpdate.passwordChangedAt = updates.passwordChangedAt ? new Date(updates.passwordChangedAt) : null;
-      if (updates.reportingManagerId !== undefined) profileUpdate.reportingManagerId = updates.reportingManagerId;
-      if (updates.deletedAt !== undefined) profileUpdate.deletedAt = updates.deletedAt ? new Date(updates.deletedAt) : null;
-
-      const data: any = { ...userUpdate };
-      const isNoProfileRole = (updates.role || existing.role) === Role.ADMIN || (updates.role || existing.role) === Role.SUPER_ADMIN;
-
-      if (Object.keys(profileUpdate).length > 0 && !isNoProfileRole) {
-        data.staffProfile = {
-          upsert: {
-            create: {
-              ...profileUpdate,
-              workspaceId: existing.workspaceId,
-              employeeId: profileUpdate.employeeId || existing.staffProfile?.employeeId || `EMP-${Date.now()}`,
-              email: profileUpdate.email || existing.email,
-            },
-            update: profileUpdate,
-          }
-        };
-      }
+      if (updates.alternatePhone !== undefined) data.alternatePhone = updates.alternatePhone;
+      if (updates.designation !== undefined) data.designation = updates.designation;
+      if (updates.department !== undefined) data.department = updates.department;
+      if (updates.reportingManagerId !== undefined) data.reportingManagerId = updates.reportingManagerId;
+      if (updates.joiningDate !== undefined) data.joiningDate = updates.joiningDate;
+      if (updates.employmentType !== undefined) data.employmentType = updates.employmentType;
+      if (updates.salary !== undefined) data.salary = updates.salary;
+      if (updates.gender !== undefined) data.gender = updates.gender;
+      if (updates.dateOfBirth !== undefined) data.dateOfBirth = updates.dateOfBirth;
+      if (updates.address !== undefined) data.address = updates.address;
+      if (updates.city !== undefined) data.city = updates.city;
+      if (updates.state !== undefined) data.state = updates.state;
+      if (updates.country !== undefined) data.country = updates.country;
+      if (updates.postalCode !== undefined) data.postalCode = updates.postalCode;
+      if (updates.emergencyContactName !== undefined) data.emergencyContactName = updates.emergencyContactName;
+      if (updates.emergencyContactNumber !== undefined) data.emergencyContactNumber = updates.emergencyContactNumber;
+      if (updates.emergencyContactRelation !== undefined) data.emergencyContactRelation = updates.emergencyContactRelation;
+      if (updates.bloodGroup !== undefined) data.bloodGroup = updates.bloodGroup;
+      if (updates.maritalStatus !== undefined) data.maritalStatus = updates.maritalStatus;
+      if (updates.nationality !== undefined) data.nationality = updates.nationality;
+      if (updates.probationEndDate !== undefined) data.probationEndDate = updates.probationEndDate;
+      if (updates.workLocation !== undefined) data.workLocation = updates.workLocation;
+      if (updates.bio !== undefined) data.bio = updates.bio;
+      if (updates.passwordChangedAt !== undefined) data.passwordChangedAt = updates.passwordChangedAt;
 
       const user = await this.prisma.user.update({
         where: { id },
         data,
-        include: { staffProfile: true },
       });
       return this.mapToEntity(user);
     } catch (e) {
@@ -345,32 +292,35 @@ export class UserRepository {
   }
 
   async saveRefreshToken(id: string, token: string | null): Promise<void> {
-    await this.prisma.user.update({
-      where: { id },
-      data: { refreshToken: token },
-    });
+    if (token) {
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + 7);
+      await this.prisma.refreshToken.upsert({
+        where: { token },
+        create: {
+          userId: id,
+          token,
+          expiresAt,
+        },
+        update: {
+          expiresAt,
+          isRevoked: false,
+        },
+      });
+    } else {
+      await this.prisma.refreshToken.updateMany({
+        where: { userId: id },
+        data: { isRevoked: true },
+      });
+    }
   }
 
   async deleteById(id: string): Promise<boolean> {
     try {
-      const user = await this.prisma.user.findUnique({
+      await this.prisma.user.update({
         where: { id },
-        include: { staffProfile: true }
+        data: { deletedAt: new Date() },
       });
-      
-      if (!user) return false;
-
-      if (user.staffProfile) {
-        await this.prisma.staffProfile.update({
-          where: { userId: id },
-          data: { deletedAt: new Date() },
-        });
-      } else {
-        // Hard delete users without profiles (ADMINs) since they can't be soft deleted properly
-        await this.prisma.user.delete({
-          where: { id }
-        });
-      }
       return true;
     } catch (e) {
       console.error('Error in UserRepository.deleteById:', e);
@@ -379,11 +329,8 @@ export class UserRepository {
   }
 
   async count(includeDeleted = false): Promise<number> {
-    const whereCondition = includeDeleted ? undefined : {
-      OR: [{ staffProfile: null }, { staffProfile: { deletedAt: null } }]
-    };
     return this.prisma.user.count({
-      where: whereCondition,
+      where: includeDeleted ? undefined : { deletedAt: null },
     });
   }
 
@@ -391,37 +338,26 @@ export class UserRepository {
     const q = query.toLowerCase();
     const users = await this.prisma.user.findMany({
       where: {
+        deletedAt: null,
         OR: [
-          { staffProfile: null },
-          { staffProfile: { deletedAt: null } }
+          { email: { contains: q, mode: 'insensitive' } },
+          { firstName: { contains: q, mode: 'insensitive' } },
+          { lastName: { contains: q, mode: 'insensitive' } },
+          { employeeId: { contains: q, mode: 'insensitive' } },
         ],
-        AND: [
-          {
-            OR: [
-              { email: { contains: q, mode: 'insensitive' } },
-              { firstName: { contains: q, mode: 'insensitive' } },
-              { lastName: { contains: q, mode: 'insensitive' } },
-              { staffProfile: { employeeId: { contains: q, mode: 'insensitive' } } },
-            ]
-          }
-        ]
       },
-      include: { staffProfile: true },
     });
     return users.map((u) => this.mapToEntity(u));
   }
 
   async filter(criteria: { department?: string; status?: UserStatus; role?: Role }): Promise<UserEntity[]> {
-    const where: any = {
-      OR: [{ staffProfile: null }, { staffProfile: { deletedAt: null } }]
-    };
-    if (criteria.department) where.staffProfile = { department: criteria.department };
+    const where: any = { deletedAt: null };
+    if (criteria.department) where.department = criteria.department;
     if (criteria.status) where.status = criteria.status;
     if (criteria.role) where.role = criteria.role;
 
     const users = await this.prisma.user.findMany({
       where,
-      include: { staffProfile: true },
     });
     return users.map((u) => this.mapToEntity(u));
   }

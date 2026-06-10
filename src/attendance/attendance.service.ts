@@ -6,6 +6,7 @@ import { CheckInDto } from './dto/check-in.dto';
 import { CheckOutDto } from './dto/check-out.dto';
 import { AttendanceQueryDto } from './dto/attendance-query.dto';
 import { formatDate, formatDateTime, formatTime, formatDuration, formatSummaryDuration } from '../common/utils/date-format.util';
+import { AuditService } from '../audit/audit.service';
 
 function calculateAttendanceStatus(firstCheckIn: Date | null, totalWorkMinutes: number): string {
   if (!firstCheckIn) return 'ABSENT';
@@ -31,6 +32,7 @@ export class AttendanceService {
     private readonly attendanceRepo: AttendanceRepository,
     private readonly userRepo: UserRepository,
     private readonly prisma: PrismaService,
+    private readonly auditService: AuditService,
   ) {}
 
   private _formatDailySummaryResponse(sessions: any[], summary?: any) {
@@ -46,10 +48,10 @@ export class AttendanceService {
       return null;
     };
 
-    const firstCheckIn = formatTimeFromValue(summary?.firstCheckIn);
-    const lastCheckOut = formatTimeFromValue(summary?.lastCheckOut);
-    const totalWorkMinutes = summary?.totalWorkMinutes ?? 0;
-    const totalBreakMinutes = summary?.totalBreakMinutes ?? 0;
+    const firstCheckIn = formatTimeFromValue(summary?.checkIn);
+    const lastCheckOut = formatTimeFromValue(summary?.checkOut);
+    const totalWorkMinutes = summary?.workedMinutes ?? 0;
+    const totalBreakMinutes = summary?.breakMinutes ?? 0;
 
     return {
       firstCheckIn,
@@ -59,9 +61,12 @@ export class AttendanceService {
       sessions: sessions.map((s) => ({
         checkIn: formatTimeFromValue(s.checkInTime) ?? '',
         checkOut: s.checkOutTime ? (formatTimeFromValue(s.checkOutTime) ?? null) : null,
+        checkInTime: s.checkInTime ? (s.checkInTime instanceof Date ? s.checkInTime.toISOString() : new Date(s.checkInTime).toISOString()) : '',
+        checkOutTime: s.checkOutTime ? (s.checkOutTime instanceof Date ? s.checkOutTime.toISOString() : new Date(s.checkOutTime).toISOString()) : null,
         duration: s.durationMinutes !== null ? formatDuration(s.durationMinutes) : '0m',
         location: s.location ?? undefined,
         deviceInfo: s.deviceInfo ?? undefined,
+        notes: s.notes ?? null,
         status: s.status,
       })),
     };
@@ -71,6 +76,9 @@ export class AttendanceService {
     const user = await this.userRepo.findById(userId);
     if (!user) {
       throw new NotFoundException('User not found');
+    }
+    if (!user.workspaceId) {
+      throw new ConflictException('User is not associated with any workspace');
     }
 
     const checkInTime = dto.checkInTime ? new Date(dto.checkInTime) : new Date();
@@ -87,7 +95,7 @@ export class AttendanceService {
       await this.attendanceRepo.createSession(
         {
           userId,
-          workspaceId: user.workspaceId,
+          workspaceId: user.workspaceId!,
           checkInTime,
           notes: dto.notes,
           location: dto.location,
@@ -130,17 +138,26 @@ export class AttendanceService {
 
       const summary = await this.attendanceRepo.upsertDailySummary(
         {
+          workspaceId: user.workspaceId!,
           userId,
           date: dateOnly,
-          firstCheckIn,
-          lastCheckOut,
-          totalWorkMinutes,
-          totalBreakMinutes,
-          totalSessions: rawSessions.length,
-          attendanceStatus: status,
+          checkIn: firstCheckIn,
+          checkOut: lastCheckOut,
+          workedMinutes: totalWorkMinutes,
+          breakMinutes: totalBreakMinutes,
+          status,
         },
         tx,
       );
+
+      await this.auditService.log({
+        userId,
+        workspaceId: user.workspaceId!,
+        action: 'CHECK_IN',
+        module: 'ATTENDANCE',
+        newData: { checkInTime },
+        detail: `User checked in at ${formatDateTime(checkInTime) || checkInTime.toISOString()}`,
+      });
 
       return this._formatDailySummaryResponse(rawSessions, summary);
     });
@@ -155,7 +172,7 @@ export class AttendanceService {
         throw new NotFoundException('No active check-in found');
       }
 
-      const checkInTime = new Date(open.checkInTime.includes(', ') ? `${open.checkInTime.split(', ')[0]} ${open.checkInTime.split(', ')[1]}` : open.checkInTime);
+      const checkInTime = open.checkInTime;
       const durationMinutes = Math.max(0, Math.round((checkOutTime.getTime() - checkInTime.getTime()) / 60000));
 
       // Update active session
@@ -212,17 +229,26 @@ export class AttendanceService {
 
       const summary = await this.attendanceRepo.upsertDailySummary(
         {
+          workspaceId: open.workspaceId,
           userId,
           date: dateOnly,
-          firstCheckIn,
-          lastCheckOut,
-          totalWorkMinutes,
-          totalBreakMinutes,
-          totalSessions: rawSessions.length,
-          attendanceStatus: status,
+          checkIn: firstCheckIn,
+          checkOut: lastCheckOut,
+          workedMinutes: totalWorkMinutes,
+          breakMinutes: totalBreakMinutes,
+          status,
         },
         tx,
       );
+
+      await this.auditService.log({
+        userId,
+        workspaceId: open.workspaceId,
+        action: 'CHECK_OUT',
+        module: 'ATTENDANCE',
+        newData: { checkOutTime },
+        detail: `User checked out at ${formatDateTime(checkOutTime) || checkOutTime.toISOString()}`,
+      });
 
       return this._formatDailySummaryResponse(rawSessions, summary);
     });
@@ -232,7 +258,9 @@ export class AttendanceService {
     const now = new Date();
     const dateOnly = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
 
-    const sessions = await this.attendanceRepo.findSessionsByUserIdAndDate(userId, dateOnly);
+    const from = new Date(dateOnly.getTime());
+    const to = new Date(dateOnly.getTime() + 24 * 60 * 60 * 1000 - 1);
+    const sessions = await this.attendanceRepo.findSessionsByUserIdInRange(userId, from, to);
     const summary = await this.attendanceRepo.findDailySummary(userId, dateOnly);
 
     if (sessions.length === 0) {
@@ -276,25 +304,27 @@ export class AttendanceService {
     // Fetch sessions in range
     const sessions = await this.attendanceRepo.findSessionsByUserIdInRange(userId, from, to);
 
-    // Group sessions by UTC date string in "DD Mon YYYY" format
+    // Group sessions by UTC date string
     const sessionsByDate = new Map<string, any[]>();
     for (const s of sessions) {
-      const datePart = s.checkInTime.split(', ')[0]; // "06 Jun 2026"
-      if (!sessionsByDate.has(datePart)) {
-        sessionsByDate.set(datePart, []);
+      const formatted = formatDate(s.checkInTime);
+      if (formatted) {
+        if (!sessionsByDate.has(formatted)) {
+          sessionsByDate.set(formatted, []);
+        }
+        sessionsByDate.get(formatted)!.push(s);
       }
-      sessionsByDate.get(datePart)!.push(s);
     }
 
     return summaries.map((sum) => {
-      const datePart = sum.date; // "06 Jun 2026"
-      const dateSessions = sessionsByDate.get(datePart) ?? [];
+      const formattedDate = formatDate(sum.date) || '';
+      const dateSessions = sessionsByDate.get(formattedDate) ?? [];
 
       return {
         date: sum.date,
         ...this._formatDailySummaryResponse(dateSessions, sum),
-        attendanceStatus: sum.attendanceStatus,
-        totalSessions: sum.totalSessions,
+        attendanceStatus: sum.status,
+        totalSessions: dateSessions.length,
       };
     });
   }
@@ -314,22 +344,22 @@ export class AttendanceService {
              d.getUTCMonth() === todayDateOnly.getUTCMonth() &&
              d.getUTCFullYear() === todayDateOnly.getUTCFullYear();
     });
-    const dailyHours = todaySummary ? formatSummaryDuration(todaySummary.totalWorkMinutes) : '0h 0m';
+    const dailyHours = todaySummary ? formatSummaryDuration(todaySummary.workedMinutes) : '0h 0m';
 
     // Calculate weekly hours
     const startOfWeek = this._startOfCurrentWeek();
     const weeklySummaries = summaries.filter((s) => new Date(s.date) >= startOfWeek);
-    const weeklyMinutes = weeklySummaries.reduce((sum, s) => sum + s.totalWorkMinutes, 0);
+    const weeklyMinutes = weeklySummaries.reduce((sum, s) => sum + s.workedMinutes, 0);
     const weeklyHours = formatSummaryDuration(weeklyMinutes);
 
     // Calculate monthly hours
     const startOfMonth = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1));
     const monthlySummaries = summaries.filter((s) => new Date(s.date) >= startOfMonth);
-    const monthlyMinutes = monthlySummaries.reduce((sum, s) => sum + s.totalWorkMinutes, 0);
+    const monthlyMinutes = monthlySummaries.reduce((sum, s) => sum + s.workedMinutes, 0);
     const monthlyHours = formatSummaryDuration(monthlyMinutes);
 
     // Calculate present days in query range
-    const presentDays = summaries.filter((s) => s.totalWorkMinutes > 0).length;
+    const presentDays = summaries.filter((s) => s.workedMinutes > 0).length;
 
     // Calculate total working days in range (Monday to Friday)
     let totalWorkingDays = 0;
@@ -347,19 +377,19 @@ export class AttendanceService {
       : 0;
 
     // Calculate late check-ins
-    const lateCheckIns = summaries.filter((s) => s.attendanceStatus === 'LATE').length;
+    const lateCheckIns = summaries.filter((s) => s.status === 'LATE').length;
 
     // Calculate overtime (minutes worked > 480 per day)
     let totalOvertimeMinutes = 0;
     for (const s of summaries) {
-      if (s.totalWorkMinutes > 480) {
-        totalOvertimeMinutes += (s.totalWorkMinutes - 480);
+      if (s.workedMinutes > 480) {
+        totalOvertimeMinutes += (s.workedMinutes - 480);
       }
     }
     const overtime = formatSummaryDuration(totalOvertimeMinutes);
 
     // Calculate average working hours
-    const totalMinutes = summaries.reduce((sum, s) => sum + s.totalWorkMinutes, 0);
+    const totalMinutes = summaries.reduce((sum, s) => sum + s.workedMinutes, 0);
     const avgMinutes = presentDays > 0 ? Math.round(totalMinutes / presentDays) : 0;
     const averageWorkingHours = formatSummaryDuration(avgMinutes);
 
@@ -394,26 +424,28 @@ export class AttendanceService {
     // Group sessions by date
     const sessionsByDate = new Map<string, any[]>();
     for (const s of sessions) {
-      const datePart = s.checkInTime.split(', ')[0];
-      if (!sessionsByDate.has(datePart)) {
-        sessionsByDate.set(datePart, []);
+      const formatted = formatDate(s.checkInTime);
+      if (formatted) {
+        if (!sessionsByDate.has(formatted)) {
+          sessionsByDate.set(formatted, []);
+        }
+        sessionsByDate.get(formatted)!.push(s);
       }
-      sessionsByDate.get(datePart)!.push(s);
     }
 
     const report: any[] = [];
     const cur = new Date(from);
     while (cur <= to) {
       const formattedDate = formatDate(cur)!;
-      const daySummary = summaries.find((s) => s.date === formattedDate);
+      const daySummary = summaries.find((s) => formatDate(s.date) === formattedDate);
 
       if (daySummary) {
         const dateSessions = sessionsByDate.get(formattedDate) ?? [];
         report.push({
           date: formattedDate,
           ...this._formatDailySummaryResponse(dateSessions, daySummary),
-          attendanceStatus: daySummary.attendanceStatus,
-          totalSessions: daySummary.totalSessions,
+          attendanceStatus: daySummary.status,
+          totalSessions: dateSessions.length,
         });
       } else {
         const dayOfWeek = cur.getUTCDay();
@@ -438,7 +470,7 @@ export class AttendanceService {
   async getDashboard(query: AttendanceQueryDto) {
     const { from, to } = this._resolveRange(query);
     const summaries = await this.attendanceRepo.findAllDailySummariesInRange(from, to);
-    const rawSessions = await this.attendanceRepo.findRawSessionsInRange(from, to);
+    const rawSessions = await this.attendanceRepo.findAllSessionsInRange(from, to);
 
     const checkedIn = new Set(summaries.map((s) => s.userId));
     const completedRaw = rawSessions.filter((s) => s.status === 'COMPLETED');

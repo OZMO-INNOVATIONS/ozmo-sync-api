@@ -83,11 +83,10 @@ Enterprise-grade Staff Management & Attendance Tracking REST API built with **Ne
 ## Database Architecture
 
 OZMO SYNC uses a strictly separated schema structure mapping to a multi-tenant PostgreSQL database:
-- **`users` table**: Handles core identity, credentials, roles, and status. It also stores `firstName` and `lastName` to ensure all users have names regardless of their role.
-- **`staff_profiles` table**: Holds all HR-related employee fields, contact info, and role designations. *(Note: Users with the `ADMIN` or `SUPER_ADMIN` role do NOT receive a `staff_profiles` record. Their data is fully contained in the `users` table.)*
-- **Enterprise Modules**: Additional models mapped for Leave Management (`leave_types`, `leave_requests`), Projects (`projects`, `project_members`, `tasks`), and `notifications`.
-
-*(Note: While the database layer strictly separates these domains, the API abstracts them transparently behind unified JSON entities, meaning your HTTP payloads and responses remain entirely unaffected by this role-based architecture separation!)*
+- **`workspaces` table**: Stores multiple workspace profiles (such as code, slug, name, etc.).
+- **`users` table**: Handles core identity, credentials, roles, and status. Reusable profile fields (address, emergency contact, bio, etc.) are consolidated directly onto this table to support clean query scopes while preserving backward compatibility.
+- **`workspace_members` table**: Joins users and workspaces in a many-to-many relationship, defining workspace-specific roles, designations, departments, reporting manager links, and joining dates.
+- **Enterprise Modules**: Additional models mapped for Leave Management (`leave_types`, `leave_requests`, `leave_balances`), Projects (`projects`, `project_members`, `tasks`), and `notifications`, strictly isolated using workspace IDs.
 
 ---
 
@@ -209,13 +208,11 @@ Server starts at `http://localhost:4000/api/v1`
 
 | Role          | Description                               |
 | ------------- | ----------------------------------------- |
-| `SUPER_ADMIN` | Full system access                        |
-| `ADMIN`       | User & staff management, full attendance  |
-| `HR`          | Staff CRUD, attendance reporting          |
-| `MANAGER`     | View staff lists and attendance           |
-| `TEAM_LEAD`   | Attendance check-in/out, view own team    |
-| `STAFF`       | Own attendance only                       |
-| `GUEST`       | Read-only (reserved)                      |
+| `SUPER_ADMIN` | Platform Administrator                    |
+| `ADMIN`       | Workspace Administrator                   |
+| `HR`          | Human Resources                           |
+| `TEAM_LEAD`   | Team Leader                               |
+| `STAFF`       | Standard Employee                         |
 
 RBAC is enforced via `@Roles()` decorator + `RolesGuard` at the controller level. Public routes (register, login, refresh) require no token.
 
@@ -248,7 +245,19 @@ All responses share the same structure.
 {
   "success": false,
   "message": "Human-readable error",
-  "timestamp": "2026-05-31T10:00:00.000Z"
+  "timestamp": "2026-05-31T10:00:00.000Z",
+  "errorCode": "ERROR_CODE_STRING"
+}
+```
+
+#### Duplicate Request Protection
+All write operations (`POST`, `PUT`, `DELETE`, `PATCH`) are protected against parallel duplicate submissions (e.g. user double-taps). Parallel requests with the same user ID, HTTP method, path, and request body parameters will return a lock conflict error:
+```json
+{
+  "success": false,
+  "message": "REQUEST_ALREADY_IN_PROGRESS",
+  "timestamp": "2026-06-10T00:55:00.000Z",
+  "errorCode": "REQUEST_ALREADY_IN_PROGRESS"
 }
 ```
 
@@ -278,29 +287,31 @@ To ensure consistent and readable time presentation across clients (such as mobi
 | `PUT`    | `/auth/change-password`         | JWT         | Any                                |
 | `POST`   | `/auth/forgot-password`         | None        | —                                  |
 | `POST`   | `/auth/reset-password`          | None        | —                                  |
+| `POST`   | `/auth/workspaces/switch`       | JWT         | Any                                |
 | `GET`    | `/profile`                      | JWT         | Any                                |
 | `PUT`    | `/profile`                      | JWT         | Any                                |
-| `GET`    | `/users`                        | JWT + Roles | `ADMIN` `HR` `MANAGER`             |
-| `GET`    | `/users/:id`                    | JWT + Roles | `ADMIN` `HR` `MANAGER`             |
+| `GET`    | `/users`                        | JWT + Roles | `ADMIN` `HR` `TEAM_LEAD`           |
+| `GET`    | `/users/:id`                    | JWT + Roles | `ADMIN` `HR` `TEAM_LEAD`           |
 | `DELETE` | `/users/:id`                    | JWT + Roles | `ADMIN`                            |
 | `GET`    | `/attendance/status`            | JWT         | Any                                |
-| `POST`   | `/attendance/check-in`          | JWT + Roles | `STAFF` `TEAM_LEAD`                |
-| `POST`   | `/attendance/check-out`         | JWT + Roles | `STAFF` `TEAM_LEAD`                |
+| `POST`   | `/attendance/check-in`          | JWT + Roles | `STAFF` `TEAM_LEAD` `ADMIN` `HR`    |
+| `POST`   | `/attendance/check-out`         | JWT + Roles | `STAFF` `TEAM_LEAD` `ADMIN` `HR`    |
 | `GET`    | `/attendance/my`                | JWT         | Any                                |
-| `GET`    | `/attendance/dashboard`         | JWT + Roles | `ADMIN` `HR` `MANAGER`             |
-| `GET`    | `/attendance/:userId`           | JWT + Roles | `ADMIN` `HR` `MANAGER`             |
+| `GET`    | `/attendance/dashboard`         | JWT + Roles | `ADMIN` `HR` `TEAM_LEAD`           |
+| `GET`    | `/attendance/:userId`           | JWT + Roles | `ADMIN` `HR` `TEAM_LEAD`           |
 | `POST`   | `/staff`                        | JWT + Roles | `ADMIN` `HR`                       |
-| `GET`    | `/staff`                        | JWT + Roles | `ADMIN` `HR` `MANAGER`             |
-| `GET`    | `/staff/search?q=`              | JWT + Roles | `ADMIN` `HR` `MANAGER`             |
-| `GET`    | `/staff/filter`                 | JWT + Roles | `ADMIN` `HR` `MANAGER`             |
-| `GET`    | `/staff/:id`                    | JWT + Roles | `ADMIN` `HR` `MANAGER` `TEAM_LEAD` |
+| `GET`    | `/staff`                        | JWT + Roles | `ADMIN` `HR` `TEAM_LEAD`           |
+| `GET`    | `/staff/search?q=`              | JWT + Roles | `ADMIN` `HR` `TEAM_LEAD`           |
+| `GET`    | `/staff/filter`                 | JWT + Roles | `ADMIN` `HR` `TEAM_LEAD`           |
+| `GET`    | `/staff/:id`                    | JWT + Roles | `ADMIN` `HR` `TEAM_LEAD`           |
 | `PUT`    | `/staff/:id`                    | JWT + Roles | `ADMIN` `HR`                       |
 | `DELETE` | `/staff/:id`                    | JWT + Roles | `ADMIN`                            |
+| `GET`    | `/workspaces`                   | JWT         | Any                                |
 | `GET`    | `/workspaces/my-workspace`      | JWT + Roles | `ADMIN` `SUPER_ADMIN`              |
 | `POST`   | `/invitations`                  | JWT + Roles | `ADMIN` `SUPER_ADMIN`              |
 | `GET`    | `/invitations`                  | JWT + Roles | `ADMIN` `SUPER_ADMIN`              |
 | `POST`   | `/invitations/:token/revoke`    | JWT + Roles | `ADMIN` `SUPER_ADMIN`              |
-| `GET`    | `/dashboard/admin`              | JWT + Roles | `ADMIN` `SUPER_ADMIN` `HR` `MANAGER`|
+| `GET`    | `/dashboard/admin`              | JWT + Roles | `ADMIN` `SUPER_ADMIN` `HR` `TEAM_LEAD` |
 | `GET`    | `/dashboard/staff`              | JWT         | Any                                |
 
 ---
@@ -568,6 +579,52 @@ curl -X POST http://localhost:4000/api/v1/auth/logout \
 
 ---
 
+#### Switch Workspace
+
+Authenticate and switch to another workspace context the user is a member of. Returns a new access and refresh token pair containing the selected workspace context claims and corresponding workspace membership role.
+
+**`POST /api/v1/auth/workspaces/switch`** — Auth: Bearer token
+
+##### Request Body
+
+| Field          | Type   | Required | Description                        |
+| -------------- | ------ | :------: | ---------------------------------- |
+| `workspaceId`  | string | Yes      | Workspace UUID to switch context to|
+
+```json
+{
+  "workspaceId": "a90fde09-5431-41fb-89ad-902e4d5fb23a"
+}
+```
+
+##### Response — `200 OK`
+
+```json
+{
+  "success": true,
+  "message": "Workspace context switched successfully",
+  "data": {
+    "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...(new)",
+    "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...(new)",
+    "user": {
+      "id": "3f2e1a4b-...",
+      "email": "jane.smith@ozmo.io",
+      "role": "HR"
+    }
+  },
+  "timestamp": "2026-05-31T10:11:00.000Z"
+}
+```
+
+```bash
+curl -X POST http://localhost:4000/api/v1/auth/workspaces/switch \
+  -H "Authorization: Bearer <ACCESS_TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{"workspaceId":"a90fde09-5431-41fb-89ad-902e4d5fb23a"}'
+```
+
+---
+
 #### Change Initial Password
 
 For newly created staff logging in with a temporary password, the system forces a password change before they can access the application.
@@ -772,7 +829,7 @@ curl -X PUT http://localhost:4000/api/v1/profile \
 
 #### List All Users
 
-**`GET /api/v1/users`** — Auth: Bearer token | Roles: `ADMIN` `HR` `MANAGER`
+**`GET /api/v1/users`** — Auth: Bearer token | Roles: `ADMIN` `HR` `TEAM_LEAD`
 
 ```bash
 curl http://localhost:4000/api/v1/users \
@@ -803,7 +860,7 @@ curl http://localhost:4000/api/v1/users \
 
 #### Get User by ID
 
-**`GET /api/v1/users/:id`** — Auth: Bearer token | Roles: `ADMIN` `HR` `MANAGER`
+**`GET /api/v1/users/:id`** — Auth: Bearer token | Roles: `ADMIN` `HR` `TEAM_LEAD`
 
 ```bash
 curl http://localhost:4000/api/v1/users/3f2e1a4b-... \
@@ -988,7 +1045,7 @@ curl "http://localhost:4000/api/v1/attendance/my?month=2026-05" \
 
 #### Get Attendance Dashboard
 
-**`GET /api/v1/attendance/dashboard`** — Auth: Bearer token | Roles: `ADMIN` `HR` `MANAGER`
+**`GET /api/v1/attendance/dashboard`** — Auth: Bearer token | Roles: `ADMIN` `HR` `TEAM_LEAD`
 
 Returns aggregated presence stats for all staff. Accepts the same query params as `/attendance/my`. Defaults to today if no query is provided.
 
@@ -1022,7 +1079,7 @@ curl "http://localhost:4000/api/v1/attendance/dashboard?date=2026-05-31" \
 
 #### Get Attendance for a User
 
-**`GET /api/v1/attendance/:userId`** — Auth: Bearer token | Roles: `ADMIN` `HR` `MANAGER`
+**`GET /api/v1/attendance/:userId`** — Auth: Bearer token | Roles: `ADMIN` `HR` `TEAM_LEAD`
 
 Accepts the same query parameters as `/attendance/my`.
 
@@ -1057,7 +1114,7 @@ curl "http://localhost:4000/api/v1/attendance/3f2e1a4b-...?month=2026-05" \
   "fullName": "Ahmad Razif",
   "email": "ahmad.razif@ozmo.io",
   "temporaryPassword": "Welcome@123",
-  "role": "MANAGER",
+  "role": "TEAM_LEAD",
   "department": "Operations",
   "joiningDate": "2026-06-01"
 }
@@ -1071,7 +1128,7 @@ curl -X POST http://localhost:4000/api/v1/staff \
     "fullName": "Ahmad Razif",
     "email": "ahmad.razif@ozmo.io",
     "temporaryPassword": "Welcome@123",
-    "role": "MANAGER",
+    "role": "TEAM_LEAD",
     "department": "Operations",
     "joiningDate": "2026-06-01"
   }'
@@ -1096,7 +1153,7 @@ curl -X POST http://localhost:4000/api/v1/staff \
 
 #### List All Staff
 
-**`GET /api/v1/staff`** — Auth: Bearer token | Roles: `ADMIN` `HR` `MANAGER`
+**`GET /api/v1/staff`** — Auth: Bearer token | Roles: `ADMIN` `HR` `TEAM_LEAD`
 
 ##### Query Parameters (all optional)
 
@@ -1118,7 +1175,7 @@ curl "http://localhost:4000/api/v1/staff?page=1&limit=20&role=STAFF&sort=name" \
 
 #### Search Staff
 
-**`GET /api/v1/staff/search?q=`** — Auth: Bearer token | Roles: `ADMIN` `HR` `MANAGER`
+**`GET /api/v1/staff/search?q=`** — Auth: Bearer token | Roles: `ADMIN` `HR` `TEAM_LEAD`
 
 Searches across `firstName`, `lastName`, `email`, `employeeId`, and `department`.
 
@@ -1154,13 +1211,13 @@ curl "http://localhost:4000/api/v1/staff/search?q=ahmad" \
 
 #### Filter Staff
 
-**`GET /api/v1/staff/filter`** — Auth: Bearer token | Roles: `ADMIN` `HR` `MANAGER`
+**`GET /api/v1/staff/filter`** — Auth: Bearer token | Roles: `ADMIN` `HR` `TEAM_LEAD`
 
 | Param        | Type   | Values                                                       |
 | ------------ | ------ | ------------------------------------------------------------ |
 | `department` | string | Any string                                                   |
 | `status`     | enum   | `ACTIVE` `INACTIVE` `RESIGNED` `TERMINATED`                  |
-| `role`       | enum   | `SUPER_ADMIN` `ADMIN` `HR` `MANAGER` `TEAM_LEAD` `STAFF` `GUEST` |
+| `role`       | enum   | `SUPER_ADMIN` `ADMIN` `HR` `TEAM_LEAD` `STAFF` |
 
 ```bash
 curl "http://localhost:4000/api/v1/staff/filter?department=Engineering&status=ACTIVE" \
@@ -1171,7 +1228,7 @@ curl "http://localhost:4000/api/v1/staff/filter?department=Engineering&status=AC
 
 #### Get Staff by ID
 
-**`GET /api/v1/staff/:id`** — Auth: Bearer token | Roles: `ADMIN` `HR` `MANAGER` `TEAM_LEAD`
+**`GET /api/v1/staff/:id`** — Auth: Bearer token | Roles: `ADMIN` `HR` `TEAM_LEAD`
 
 ```bash
 curl http://localhost:4000/api/v1/staff/3f2e1a4b-... \
@@ -1401,7 +1458,7 @@ Invite a new member to join the workspace. Generates a unique registration token
 | Field  | Type   | Required | Description                        |
 | ------ | ------ | :------: | ---------------------------------- |
 | `email` | string |   Yes    | Invitee email address.             |
-| `role`  | enum   |   Yes    | Assignable Role (e.g. `STAFF`, `HR`, `MANAGER`). |
+| `role`  | enum   |   Yes    | Assignable Role (e.g. `STAFF`, `HR`, `TEAM_LEAD`). |
 
 ```json
 {
@@ -1510,7 +1567,7 @@ curl -X POST http://localhost:4000/api/v1/invitations/c3617be3-fe44-4861-ad81-cf
 
 Retrieve statistics for the administration dashboard, reflecting the total and active workforce.
 
-**`GET /api/v1/dashboard/admin`** — Auth: Bearer token | Roles: `ADMIN`, `SUPER_ADMIN`, `HR`, `MANAGER`
+**`GET /api/v1/dashboard/admin`** — Auth: Bearer token | Roles: `ADMIN`, `SUPER_ADMIN`, `HR`, `TEAM_LEAD`
 
 ##### Response — `200 OK`
 
@@ -1603,13 +1660,12 @@ curl http://localhost:4000/api/v1/meetings \
 
 #### Create Meeting
 
-**`POST /api/v1/meetings`** — Auth: Bearer token | Roles: `ADMIN` `SUPER_ADMIN` `HR` `MANAGER`
+**`POST /api/v1/meetings`** — Auth: Bearer token | Roles: `ADMIN` `SUPER_ADMIN` `HR` `TEAM_LEAD`
 
 ##### Request Body
 
 | Field | Type | Required | Description |
 | --- | --- | :---: | --- |
-| `id` | string | No | Optional custom ID (e.g. `meet_002`) |
 | `title` | string | Yes | Meeting title |
 | `description` | string | No | Meeting description |
 | `dateTime` | string | Yes | ISO 8601 Date/Time string |
@@ -1618,7 +1674,6 @@ curl http://localhost:4000/api/v1/meetings \
 
 ```json
 {
-  "id": "meet_002",
   "title": "Client Progress Review",
   "description": "Weekly alignment sync with clients.",
   "dateTime": "2026-06-10T15:00:00.000Z",
@@ -1634,7 +1689,7 @@ curl http://localhost:4000/api/v1/meetings \
   "success": true,
   "message": "Meeting created successfully",
   "data": {
-    "id": "meet_002",
+    "id": "e3617be3-fe44-4861-ad81-cfb01f652cb9",
     "workspaceId": "790cb3f8-bcac-444c-9c79-f66dc33f9818",
     "title": "Client Progress Review",
     "description": "Weekly alignment sync with clients.",
@@ -1653,7 +1708,6 @@ curl -X POST http://localhost:4000/api/v1/meetings \
   -H "Authorization: Bearer <ACCESS_TOKEN>" \
   -H "Content-Type: application/json" \
   -d '{
-    "id": "meet_002",
     "title": "Client Progress Review",
     "description": "Weekly alignment sync with clients.",
     "dateTime": "2026-06-10T15:00:00.000Z",
@@ -1668,7 +1722,7 @@ curl -X POST http://localhost:4000/api/v1/meetings \
 
 #### Fetch All Leaves
 
-**`GET /api/v1/leaves`** — Auth: Bearer token | Roles: Any (Staff gets own leaves, Admin/HR/Manager/Team Lead gets all leaves in workspace)
+**`GET /api/v1/leaves`** — Auth: Bearer token | Roles: Any (Staff gets own leaves, Admin/HR/Team Lead gets all leaves in workspace)
 
 ##### Response — `200 OK`
 
@@ -1817,7 +1871,7 @@ curl -X POST http://localhost:4000/api/v1/leaves \
 
 #### Update Leave Status
 
-**`PUT /api/v1/leaves/:id/status`** — Auth: Bearer token | Roles: `ADMIN` `SUPER_ADMIN` `HR` `MANAGER` `TEAM_LEAD`
+**`PUT /api/v1/leaves/:id/status`** — Auth: Bearer token | Roles: `ADMIN` `SUPER_ADMIN` `HR` `TEAM_LEAD`
 
 ##### Request Body (Option A: Approve)
 

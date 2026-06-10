@@ -1,10 +1,6 @@
 import { IsString, IsNotEmpty, IsOptional, IsISO8601 } from 'class-validator';
 
 export class CreateMeetingDto {
-  @IsOptional()
-  @IsString()
-  id?: string;
-
   @IsString()
   @IsNotEmpty()
   title: string;

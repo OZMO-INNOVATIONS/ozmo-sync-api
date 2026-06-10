@@ -93,7 +93,7 @@ export class ReportsService {
       Department: u.department ?? '',
       Designation: u.designation ?? '',
       Role: u.role,
-      'Joining Date': u.joiningDate ?? '',
+      'Joining Date': u.joiningDate ? u.joiningDate.toISOString().slice(0, 10) : '',
       Status: u.status,
     }));
   }
@@ -102,20 +102,20 @@ export class ReportsService {
     const users = await this.userRepo.findAll();
     const userMap = new Map(users.map((u) => [u.id, u]));
 
-        const effectiveFrom = from ?? new Date(0);
+    const effectiveFrom = from ?? new Date(0);
     const effectiveTo = to ?? new Date();
     const records = await this.attendanceRepo.findAllSessionsInRange(effectiveFrom, effectiveTo);
 
     return records.map((r) => {
       const user = userMap.get(r.userId);
-      const datePart = r.checkInTime.includes(', ') ? r.checkInTime.split(', ')[0] : r.checkInTime.slice(0, 10);
+      const datePart = r.checkInTime.toISOString().slice(0, 10);
 
       return {
         'Employee ID': user?.employeeId ?? r.userId,
         Name: user ? `${user.firstName} ${user.lastName}` : r.userId,
         Date: datePart,
-        'Check-In': r.checkInTime,
-        'Check-Out': r.checkOutTime ?? '',
+        'Check-In': r.checkInTime.toISOString(),
+        'Check-Out': r.checkOutTime ? r.checkOutTime.toISOString() : '',
         'Duration (min)': r.durationMinutes ?? '',
         Notes: r.notes ?? '',
       };
@@ -123,22 +123,27 @@ export class ReportsService {
   }
 
   private async _auditRows(from?: Date, to?: Date): Promise<Row[]> {
-    const { entries } = await this.auditRepo.findAll({
-      from,
-      to,
+    let { entries } = await this.auditRepo.findAll({
       limit: 10000,
     });
 
+    if (from) {
+      entries = entries.filter((e) => e.createdAt >= from);
+    }
+    if (to) {
+      entries = entries.filter((e) => e.createdAt <= to);
+    }
+
     return entries.map((e) => ({
-      Timestamp: e.createdAt,
-      Actor: e.actorName ?? e.actorId ?? 'System',
-      'Actor ID': e.actorId ?? '',
+      Timestamp: e.createdAt.toISOString(),
+      Actor: e.userId ?? 'System',
+      'Actor ID': e.userId ?? '',
       Action: e.action,
-      'Entity Type': e.entityType,
-      'Entity ID': e.entityId ?? '',
+      'Entity Type': e.module,
+      'Entity ID': e.id,
       'IP Address': e.ipAddress ?? '',
       'Workspace ID': e.workspaceId ?? '',
-      Detail: e.detail ?? '',
+      Detail: e.newData?.detail ?? '',
     }));
   }
 

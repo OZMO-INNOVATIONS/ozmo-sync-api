@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, NestModule, MiddlewareConsumer } from '@nestjs/common';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
 import { PrismaModule } from './prisma/prisma.module';
@@ -22,6 +22,8 @@ import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { ResponseTransformInterceptor } from './common/interceptors/response-transform.interceptor';
+import { RequestLockInterceptor } from './common/interceptors/request-lock.interceptor';
+import { WorkspaceIsolationMiddleware } from './common/middleware/workspace-isolation.middleware';
 
 @Module({
   imports: [
@@ -49,6 +51,13 @@ import { ResponseTransformInterceptor } from './common/interceptors/response-tra
     { provide: APP_GUARD, useClass: RolesGuard },
     { provide: APP_FILTER, useClass: HttpExceptionFilter },
     { provide: APP_INTERCEPTOR, useClass: ResponseTransformInterceptor },
+    { provide: APP_INTERCEPTOR, useClass: RequestLockInterceptor },
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer
+      .apply(WorkspaceIsolationMiddleware)
+      .forRoutes('*');
+  }
+}

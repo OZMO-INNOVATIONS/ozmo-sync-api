@@ -15,15 +15,15 @@ export class MeetingsController {
 
   @Get()
   async getMeetings(@CurrentUser() user: RequestUser) {
-    const data = await this.meetingsService.findAll(user.workspaceId);
+    const data = await this.meetingsService.findAll(user.workspaceId!);
     return { message: 'Meetings fetched successfully', data };
   }
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  @Roles(Role.ADMIN, Role.HR, Role.MANAGER, Role.SUPER_ADMIN)
+  @Roles(Role.ADMIN, Role.HR, Role.SUPER_ADMIN)
   async createMeeting(@CurrentUser() user: RequestUser, @Body() dto: CreateMeetingDto) {
-    const data = await this.meetingsService.create(user.workspaceId, dto);
+    const data = await this.meetingsService.create(user.workspaceId!, dto, user.id);
     return { message: 'Meeting created successfully', data };
   }
 }

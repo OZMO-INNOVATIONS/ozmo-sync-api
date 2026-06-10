@@ -151,8 +151,8 @@ export class UsersService {
           description: `Checked in at ${timeStr}`,
           icon: 'fingerprint',
           color: isLate ? '#F59E0B' : '#10B981',
-          occurredAt: r.checkInTime,
-          metadata: { checkInTime: r.checkInTime, status: isLate ? 'LATE' : 'ON_TIME' },
+          occurredAt: r.checkInTime.toISOString(),
+          metadata: { checkInTime: r.checkInTime.toISOString(), status: isLate ? 'LATE' : 'ON_TIME' },
         });
 
         if (r.checkOutTime) {
@@ -175,8 +175,8 @@ export class UsersService {
             description: `Checked out at ${outTimeStr} (${durationMin} min)`,
             icon: 'logout',
             color: '#6B7280',
-            occurredAt: r.checkOutTime,
-            metadata: { checkOutTime: r.checkOutTime, durationMinutes: durationMin },
+            occurredAt: r.checkOutTime.toISOString(),
+            metadata: { checkOutTime: r.checkOutTime.toISOString(), durationMinutes: durationMin },
           });
         }
       }
@@ -209,7 +209,7 @@ export class UsersService {
 
     // Deduplicate by date (multiple check-ins on same day count as one)
     const dates = [
-      ...new Set(records.map((r) => r.checkInTime.includes(', ') ? r.checkInTime.split(', ')[0] : r.checkInTime.slice(0, 10))),
+      ...new Set(records.map((r) => r.checkInTime.toISOString().slice(0, 10))),
     ].sort((a, b) => b.localeCompare(a));
 
     let currentStreak = 0;

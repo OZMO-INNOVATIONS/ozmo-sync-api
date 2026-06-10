@@ -3,6 +3,7 @@ import { InvitationsService } from './invitations.service';
 import { InvitationRepository } from '../repositories/invitation.repository';
 import { UserRepository } from '../repositories/user.repository';
 import { WorkspacesRepository } from '../repositories/workspaces.repository';
+import { WorkspaceMemberRepository } from '../repositories/workspace-member.repository';
 import { AuthModule } from '../auth/auth.module';
 
 @Module({
@@ -13,6 +14,7 @@ import { AuthModule } from '../auth/auth.module';
     InvitationRepository,
     UserRepository,
     WorkspacesRepository,
+    WorkspaceMemberRepository,
   ],
   exports: [InvitationRepository, InvitationsService],
 })

@@ -36,7 +36,7 @@ export class StaffController {
   }
 
   @Get()
-  @Roles(Role.ADMIN, Role.HR, Role.MANAGER)
+  @Roles(Role.ADMIN, Role.HR)
   async listStaff(@Query() query: StaffFilterDto) {
     const data = await this.staffService.findAll(query);
     return { message: 'Staff list fetched', data };
@@ -44,30 +44,29 @@ export class StaffController {
 
   // /search and /filter must be declared BEFORE /:id to avoid shadowing
   @Get('search')
-  @Roles(Role.ADMIN, Role.HR, Role.MANAGER)
+  @Roles(Role.ADMIN, Role.HR)
   async searchStaff(@Query() query: StaffSearchDto) {
     const data = await this.staffService.search(query.q);
     return { message: 'Search results', data };
   }
 
   @Get('filter')
-  @Roles(Role.ADMIN, Role.HR, Role.MANAGER)
+  @Roles(Role.ADMIN, Role.HR)
   async filterStaff(@Query() dto: StaffFilterDto) {
     const data = await this.staffService.filter(dto);
     return { message: 'Filtered results', data };
   }
 
   @Get(':id')
-  @Roles(Role.ADMIN, Role.HR, Role.MANAGER, Role.TEAM_LEAD)
+  @Roles(Role.ADMIN, Role.HR, Role.TEAM_LEAD)
   async getStaffById(@Param('id') id: string) {
     const data = await this.staffService.findById(id);
     return { message: 'Staff member fetched', data };
   }
-
   @Put(':id')
   @Roles(Role.ADMIN, Role.HR)
-  async updateStaff(@Param('id') id: string, @Body() dto: UpdateStaffDto) {
-    const data = await this.staffService.update(id, dto);
+  async updateStaff(@Param('id') id: string, @Body() dto: UpdateStaffDto, @CurrentUser() actor: RequestUser) {
+    const data = await this.staffService.update(id, dto, actor);
     return { message: 'Staff member updated', data };
   }
 

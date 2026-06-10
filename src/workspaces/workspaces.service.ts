@@ -6,7 +6,9 @@ import {
 } from '@nestjs/common';
 import { WorkspacesRepository } from '../repositories/workspaces.repository';
 import { UserRepository } from '../repositories/user.repository';
+import { WorkspaceMemberRepository } from '../repositories/workspace-member.repository';
 import { AttendanceRepository } from '../repositories/attendance.repository';
+import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { CreateWorkspaceDto } from './dto/create-workspace.dto';
 import { UpdateWorkspaceDto } from './dto/update-workspace.dto';
@@ -19,35 +21,46 @@ export class WorkspacesService {
   constructor(
     private readonly workspacesRepo: WorkspacesRepository,
     private readonly userRepo: UserRepository,
+    private readonly workspaceMemberRepository: WorkspaceMemberRepository,
     private readonly attendanceRepo: AttendanceRepository,
     private readonly auditService: AuditService,
+    private readonly prisma: PrismaService,
   ) {}
 
   async getWorkspaceDetailsByAdmin(adminEmail: string) {
-    const workspaces = await this.workspacesRepo.findAll();
-    const workspace = workspaces.find((w) => w.adminEmail === adminEmail);
+    const workspace = await this.prisma.workspace.findFirst({
+      where: { adminEmail, deletedAt: null },
+    });
     if (!workspace) {
       throw new NotFoundException('Workspace not found for this administrator');
     }
 
-    const staff = await this.userRepo.findAll();
-    const staffInWorkspace = staff
-      .filter((u) => u.workspaceId === workspace.id || u.email.toLowerCase().trim() === adminEmail.toLowerCase().trim())
-      .map((u) => {
-        const { password, refreshToken, ...safe } = u;
-        return safe;
-      });
+    const members = await this.prisma.workspaceMember.findMany({
+      where: { workspaceId: workspace.id, deletedAt: null },
+      include: { user: true },
+    });
 
-    const attendance = await this.attendanceRepo.findAll();
+    const staffInWorkspace = members.map((m) => {
+      const { password, ...safe } = m.user;
+      void password;
+      return {
+        ...safe,
+        role: m.role,
+        status: m.status,
+      };
+    });
+
+    const attendance = await this.prisma.attendance.findMany({
+      where: { workspaceId: workspace.id, deletedAt: null },
+    });
 
     const totalEmployees = staffInWorkspace.length;
     const activeEmployees = staffInWorkspace.filter((u) => u.status === 'ACTIVE').length;
 
-    const todayStr = formatDate(new Date()) ?? new Date().toISOString().split('T')[0];
+    const todayStr = new Date().toISOString().split('T')[0];
     const presentToday = attendance.filter((r) => {
-      const isToday = r.checkInTime.startsWith(todayStr);
-      const userInWorkspace = staffInWorkspace.some((u) => u.id === r.userId);
-      return isToday && userInWorkspace;
+      const isToday = r.date.toISOString().startsWith(todayStr);
+      return isToday && r.status === 'PRESENT';
     }).length;
     const absentToday = Math.max(0, totalEmployees - presentToday);
 
@@ -82,14 +95,28 @@ export class WorkspacesService {
   }
 
   async createWorkspace(dto: CreateWorkspaceDto, actor: RequestUser) {
+    const slug = dto.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+    const workspaceCode = `WS-${Date.now().toString().slice(-6)}`;
+
     const workspace = await this.workspacesRepo.create({
       name: dto.name,
-      domain: dto.domain,
+      slug,
+      workspaceCode,
+      ownerId: actor.id,
       plan: dto.plan,
       isActive: true,
-      memberCount: 0,
-      adminEmail: dto.adminEmail,
-    });
+      memberCount: 1,
+      adminEmail: dto.adminEmail || actor.email,
+    } as any);
+
+    // Link creating user as Workspace Member
+    await this.workspaceMemberRepository.create({
+      workspaceId: workspace.id,
+      userId: actor.id,
+      role: 'SUPER_ADMIN',
+      status: 'ACTIVE',
+      isPrimary: false,
+    } as any);
 
     await this.auditService.log({
       action: 'WORKSPACE_CREATED',

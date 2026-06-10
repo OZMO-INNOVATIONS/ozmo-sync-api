@@ -1,34 +1,44 @@
 import { Injectable } from '@nestjs/common';
-import { AuditRepository, AuditAction, AuditEntry } from '../repositories/audit.repository';
+import { AuditRepository, AuditLogEntity } from '../repositories/audit.repository';
 import { AuditQueryDto } from './dto/audit-query.dto';
 
 export interface LogEntryOptions {
-  action: AuditAction;
-  entityType: string;
-  entityId?: string;
-  actorId?: string;
-  actorName?: string;
-  ipAddress?: string;
+  action: string;
+  module?: string;
+  userId?: string;
   workspaceId?: string;
-  detail?: string;
+  oldData?: any;
+  newData?: any;
+  ipAddress?: string;
+  entityType?: string; // fallback
+  actorId?: string; // fallback
+  actorName?: string; // fallback
+  detail?: string; // fallback
+  entityId?: string; // fallback
 }
 
 @Injectable()
 export class AuditService {
   constructor(private readonly auditRepo: AuditRepository) {}
 
-  async log(options: LogEntryOptions): Promise<AuditEntry> {
-    return await this.auditRepo.log(options);
+  async log(options: LogEntryOptions): Promise<AuditLogEntity> {
+    return await this.auditRepo.log({
+      workspaceId: options.workspaceId,
+      userId: options.userId || options.actorId,
+      module: options.module || options.entityType || 'SYSTEM',
+      action: options.action,
+      oldData: options.oldData,
+      newData: options.newData || (options.detail ? { detail: options.detail } : undefined),
+      ipAddress: options.ipAddress,
+    });
   }
 
   async getLogs(query: AuditQueryDto) {
     const { entries, total } = await this.auditRepo.findAll({
       action: query.action,
-      entityType: query.entityType,
-      actorId: query.actorId,
+      module: query.entityType,
+      userId: query.actorId,
       workspaceId: query.workspaceId,
-      from: query.from ? new Date(query.from) : undefined,
-      to: query.to ? new Date(query.to) : undefined,
       limit: query.limit ?? 50,
       offset: query.offset ?? 0,
     });
@@ -43,20 +53,20 @@ export class AuditService {
 
   async getEntityLog(entityId: string) {
     const entries = await this.auditRepo.findByEntityId(entityId);
-    return entries.map(this._format);
+    return entries.map((e) => this._format(e));
   }
 
-  private _format(entry: AuditEntry) {
+  private _format(entry: AuditLogEntity) {
     return {
       id: entry.id,
       action: entry.action,
-      entityType: entry.entityType,
-      entityId: entry.entityId,
-      actor: entry.actorName ?? entry.actorId ?? 'System',
-      actorId: entry.actorId,
+      entityType: entry.module,
+      entityId: entry.id,
+      actor: entry.userId ?? 'System',
+      actorId: entry.userId,
       ipAddress: entry.ipAddress,
       workspaceId: entry.workspaceId,
-      detail: entry.detail,
+      detail: entry.newData?.detail ?? '',
       timestamp: entry.createdAt,
     };
   }

@@ -16,26 +16,26 @@ export class LeavesController {
 
   @Get()
   async getLeaves(@CurrentUser() user: RequestUser) {
-    const data = await this.leavesService.findAll(user.workspaceId, user.id, user.role);
+    const data = await this.leavesService.findAll(user.workspaceId!, user.id, user.role);
     return { message: 'Leaves fetched successfully', data };
   }
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
   async submitLeave(@CurrentUser() user: RequestUser, @Body() dto: SubmitLeaveDto) {
-    const data = await this.leavesService.create(user.workspaceId, user.id, dto);
+    const data = await this.leavesService.create(user.workspaceId!, user.id, dto);
     return { message: 'Leave request submitted successfully', data };
   }
 
   @Put(':id/status')
   @HttpCode(HttpStatus.OK)
-  @Roles(Role.ADMIN, Role.SUPER_ADMIN, Role.HR, Role.MANAGER, Role.TEAM_LEAD)
+  @Roles(Role.ADMIN, Role.SUPER_ADMIN, Role.HR, Role.TEAM_LEAD)
   async updateLeaveStatus(
     @Param('id') id: string,
     @CurrentUser() user: RequestUser,
     @Body() dto: UpdateLeaveStatusDto,
   ) {
-    const data = await this.leavesService.updateStatus(id, user.workspaceId, dto);
+    const data = await this.leavesService.updateStatus(id, user.workspaceId!, dto, user.id);
     return { message: 'Leave status updated successfully', data };
   }
 }

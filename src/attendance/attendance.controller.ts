@@ -27,7 +27,7 @@ export class AttendanceController {
 
   @Post('check-in')
   @HttpCode(HttpStatus.CREATED)
-  @Roles(Role.STAFF, Role.TEAM_LEAD, Role.ADMIN, Role.HR, Role.MANAGER)
+  @Roles(Role.STAFF, Role.TEAM_LEAD, Role.ADMIN, Role.HR)
   async checkIn(@CurrentUser() user: RequestUser, @Body() dto: CheckInDto) {
     const data = await this.attendanceService.checkIn(user.id, dto);
     return { message: 'Check-in recorded', data };
@@ -35,7 +35,7 @@ export class AttendanceController {
 
   @Post('check-out')
   @HttpCode(HttpStatus.OK)
-  @Roles(Role.STAFF, Role.TEAM_LEAD, Role.ADMIN, Role.HR, Role.MANAGER)
+  @Roles(Role.STAFF, Role.TEAM_LEAD, Role.ADMIN, Role.HR)
   async checkOut(@CurrentUser() user: RequestUser, @Body() dto: CheckOutDto) {
     const data = await this.attendanceService.checkOut(user.id, dto);
     return { message: 'Check-out recorded', data };
@@ -81,14 +81,14 @@ export class AttendanceController {
   }
 
   @Get('dashboard')
-  @Roles(Role.ADMIN, Role.HR, Role.MANAGER)
+  @Roles(Role.ADMIN, Role.HR, Role.TEAM_LEAD)
   async getDashboard(@Query() query: AttendanceQueryDto) {
     const data = await this.attendanceService.getDashboard(query);
     return { message: 'Dashboard data fetched', data };
   }
 
   @Get(':userId')
-  @Roles(Role.ADMIN, Role.HR, Role.MANAGER)
+  @Roles(Role.ADMIN, Role.HR, Role.TEAM_LEAD)
   async getUserAttendance(
     @Param('userId') userId: string,
     @Query() query: AttendanceQueryDto,

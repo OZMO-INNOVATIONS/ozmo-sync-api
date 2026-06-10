@@ -16,7 +16,7 @@ export class ProfileService {
 
     return {
       ...sanitized,
-      profilePhoto: user.profileImage ?? null,
+      profilePhoto: user.profilePhoto ?? null,
       address: user.address ?? null,
       emergencyContact: user.emergencyContactName ? `${user.emergencyContactName} (${user.emergencyContactNumber ?? ''})` : null,
       bio: user.bio ?? null,
@@ -53,7 +53,7 @@ export class ProfileService {
     if (dto.firstName !== undefined) userUpdates.firstName = dto.firstName;
     if (dto.lastName !== undefined) userUpdates.lastName = dto.lastName;
     if (dto.phone !== undefined) userUpdates.phone = dto.phone;
-    if (dto.profilePhoto !== undefined) userUpdates.profileImage = dto.profilePhoto;
+    if (dto.profilePhoto !== undefined) userUpdates.profilePhoto = dto.profilePhoto;
     if (dto.address !== undefined) userUpdates.address = dto.address;
     if (dto.bio !== undefined) userUpdates.bio = dto.bio;
 
@@ -70,13 +70,12 @@ export class ProfileService {
 
     if (isAdmin) {
       if (dto.email !== undefined) userUpdates.email = dto.email;
-      if (dto.role !== undefined) userUpdates.role = dto.role;
+      if (dto.role !== undefined) userUpdates.role = dto.role as any;
       if (dto.designation !== undefined) userUpdates.designation = dto.designation;
       if (dto.department !== undefined) userUpdates.department = dto.department;
-      if (dto.joiningDate !== undefined) userUpdates.joiningDate = dto.joiningDate;
+      if (dto.joiningDate !== undefined) userUpdates.joiningDate = dto.joiningDate ? new Date(dto.joiningDate) : undefined;
       if (dto.employeeId !== undefined) userUpdates.employeeId = dto.employeeId;
       if (dto.workspaceId !== undefined) userUpdates.workspaceId = dto.workspaceId;
-      if (dto.workspaceName !== undefined) userUpdates.workspaceName = dto.workspaceName;
     }
 
     if (Object.keys(userUpdates).length > 0) {
@@ -106,8 +105,8 @@ export class ProfileService {
   }
 
   private _sanitize(user: UserEntity) {
-    const { password, refreshToken, ...safe } = user;
-    void password; void refreshToken;
+    const { password, ...safe } = user;
+    void password;
     return safe;
   }
 }
