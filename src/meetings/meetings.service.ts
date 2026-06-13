@@ -11,10 +11,18 @@ export class MeetingsService {
   ) {}
 
   async findAll(workspaceId: string) {
-    return this.prisma.meeting.findMany({
+    const meetings = await this.prisma.meeting.findMany({
       where: { workspaceId, deletedAt: null },
       orderBy: { meetingDate: 'asc' },
     });
+    return meetings.map((m) => ({
+      id: m.id,
+      title: m.title,
+      description: m.description,
+      dateTime: m.meetingDate.toISOString(),
+      link: m.meetingLink,
+      duration: m.duration,
+    }));
   }
 
   async create(workspaceId: string, dto: CreateMeetingDto, createdBy: string) {
@@ -32,6 +40,29 @@ export class MeetingsService {
       data,
     });
 
+    // Create database notification for workspace members
+    try {
+      const members = await this.prisma.workspaceMember.findMany({
+        where: { workspaceId, deletedAt: null, status: 'ACTIVE' },
+        select: { userId: true },
+      });
+
+      if (members.length > 0) {
+        await this.prisma.notification.createMany({
+          data: members.map((m) => ({
+            workspaceId,
+            userId: m.userId,
+            title: 'New Meeting Scheduled',
+            message: `A new meeting "${meeting.title}" has been scheduled.`,
+            type: 'teamUpdate',
+            actionId: meeting.id,
+          })),
+        });
+      }
+    } catch (e) {
+      console.error('Error creating meeting notifications:', e);
+    }
+
     await this.auditService.log({
       userId: createdBy,
       workspaceId,
@@ -41,6 +72,13 @@ export class MeetingsService {
       detail: `Created meeting: ${meeting.title}`,
     });
 
-    return meeting;
+    return {
+      id: meeting.id,
+      title: meeting.title,
+      description: meeting.description,
+      dateTime: meeting.meetingDate.toISOString(),
+      link: meeting.meetingLink,
+      duration: meeting.duration,
+    };
   }
 }

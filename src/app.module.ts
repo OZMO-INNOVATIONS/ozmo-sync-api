@@ -18,6 +18,8 @@ import { InvitationsModule } from './invitations/invitations.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { MeetingsModule } from './meetings/meetings.module';
 import { LeavesModule } from './leaves/leaves.module';
+import { NotificationsModule } from './notifications/notifications.module';
+import { HolidaysModule } from './holidays/holidays.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
@@ -44,6 +46,8 @@ import { WorkspaceIsolationMiddleware } from './common/middleware/workspace-isol
     InvitationsModule,
     MeetingsModule,
     LeavesModule,
+    NotificationsModule,
+    HolidaysModule,
     CommonModule,
   ],
   providers: [

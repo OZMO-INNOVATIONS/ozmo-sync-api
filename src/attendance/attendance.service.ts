@@ -1,11 +1,14 @@
-import { Injectable, ConflictException, NotFoundException } from '@nestjs/common';
+import { Injectable, ConflictException, NotFoundException, BadRequestException } from '@nestjs/common';
 import { AttendanceRepository } from '../repositories/attendance.repository';
 import { UserRepository } from '../repositories/user.repository';
 import { PrismaService } from '../prisma/prisma.service';
 import { CheckInDto } from './dto/check-in.dto';
 import { CheckOutDto } from './dto/check-out.dto';
+import { GPSCheckInDto, GPSCheckOutDto } from './dto/gps-check-in.dto';
+import { FaceCheckInDto, FaceCheckOutDto } from './dto/face-check-in.dto';
 import { AttendanceQueryDto } from './dto/attendance-query.dto';
-import { formatDate, formatDateTime, formatTime, formatDuration, formatSummaryDuration } from '../common/utils/date-format.util';
+import { RegularizeAttendanceDto, ReviewRegularizationDto } from './dto/regularize-attendance.dto';
+import { formatDate, formatDateTime, formatTime, formatDuration, formatSummaryDuration, getKolkataDate } from '../common/utils/date-format.util';
 import { AuditService } from '../audit/audit.service';
 
 function calculateAttendanceStatus(firstCheckIn: Date | null, totalWorkMinutes: number): string {
@@ -72,7 +75,7 @@ export class AttendanceService {
     };
   }
 
-  async checkIn(userId: string, dto: CheckInDto) {
+  async checkIn(userId: string, dto: CheckInDto, clientIp?: string, verificationType?: string) {
     const user = await this.userRepo.findById(userId);
     if (!user) {
       throw new NotFoundException('User not found');
@@ -81,8 +84,37 @@ export class AttendanceService {
       throw new ConflictException('User is not associated with any workspace');
     }
 
+    // Check Allowed Wifi IP Restriction
+    if (!verificationType || verificationType === 'WIFI') {
+      const workspace = await this.prisma.workspace.findUnique({
+        where: { id: user.workspaceId },
+      });
+      if (workspace?.allowedWifiIp) {
+        const allowedIps = workspace.allowedWifiIp.split(',').map((ip) => ip.trim());
+        const cleanIp = clientIp ? clientIp.replace(/^::ffff:/, '') : '';
+        const isAllowed = allowedIps.some((allowedIp) => {
+          if (cleanIp === allowedIp || clientIp === allowedIp || allowedIp === '*' || cleanIp === '127.0.0.1' || cleanIp === '::1') {
+            return true;
+          }
+          const allowedParts = allowedIp.split('.');
+          const clientParts = cleanIp.split('.');
+          if (allowedParts.length === 4 && clientParts.length === 4) {
+            return allowedParts[0] === clientParts[0] &&
+                   allowedParts[1] === clientParts[1] &&
+                   allowedParts[2] === clientParts[2];
+          }
+          return false;
+        });
+        if (!isAllowed) {
+          throw new ConflictException(
+            `Access Denied: You are not connected to the authorized office WiFi network. Allowed IP(s): ${workspace.allowedWifiIp}. Your IP: ${cleanIp || 'unknown'}`
+          );
+        }
+      }
+    }
+
     const checkInTime = dto.checkInTime ? new Date(dto.checkInTime) : new Date();
-    const dateOnly = new Date(Date.UTC(checkInTime.getUTCFullYear(), checkInTime.getUTCMonth(), checkInTime.getUTCDate()));
+    const dateOnly = getKolkataDate(checkInTime);
 
     return await this.prisma.$transaction(async (tx) => {
       // Prevent duplicate Check-In without Check-Out
@@ -100,17 +132,18 @@ export class AttendanceService {
           notes: dto.notes,
           location: dto.location,
           deviceInfo: dto.deviceInfo,
+          verificationType,
         },
         tx,
       );
 
-      // Fetch all sessions for today
+      // Fetch all sessions for today (Kolkata timezone range)
       const rawSessions = await tx.attendanceSession.findMany({
         where: {
           userId,
           checkInTime: {
-            gte: new Date(dateOnly.getTime()),
-            lte: new Date(dateOnly.getTime() + 24 * 60 * 60 * 1000 - 1),
+            gte: new Date(dateOnly.getTime() - 5.5 * 60 * 60 * 1000),
+            lte: new Date(dateOnly.getTime() + 24 * 60 * 60 * 1000 - 1 - 5.5 * 60 * 60 * 1000),
           },
         },
         orderBy: { checkInTime: 'asc' },
@@ -146,6 +179,7 @@ export class AttendanceService {
           workedMinutes: totalWorkMinutes,
           breakMinutes: totalBreakMinutes,
           status,
+          verificationType,
         },
         tx,
       );
@@ -163,13 +197,42 @@ export class AttendanceService {
     });
   }
 
-  async checkOut(userId: string, dto: CheckOutDto) {
+  async checkOut(userId: string, dto: CheckOutDto, clientIp?: string, verificationType?: string) {
     const checkOutTime = dto.checkOutTime ? new Date(dto.checkOutTime) : new Date();
 
     return await this.prisma.$transaction(async (tx) => {
       const open = await this.attendanceRepo.findOpenSession(userId, tx);
       if (!open) {
         throw new NotFoundException('No active check-in found');
+      }
+
+      // Check Allowed Wifi IP Restriction
+      if (!verificationType || verificationType === 'WIFI') {
+        const workspace = await tx.workspace.findUnique({
+          where: { id: open.workspaceId },
+        });
+        if (workspace?.allowedWifiIp) {
+          const allowedIps = workspace.allowedWifiIp.split(',').map((ip) => ip.trim());
+          const cleanIp = clientIp ? clientIp.replace(/^::ffff:/, '') : '';
+          const isAllowed = allowedIps.some((allowedIp) => {
+            if (cleanIp === allowedIp || clientIp === allowedIp || allowedIp === '*' || cleanIp === '127.0.0.1' || cleanIp === '::1') {
+              return true;
+            }
+            const allowedParts = allowedIp.split('.');
+            const clientParts = cleanIp.split('.');
+            if (allowedParts.length === 4 && clientParts.length === 4) {
+              return allowedParts[0] === clientParts[0] &&
+                     allowedParts[1] === clientParts[1] &&
+                     allowedParts[2] === clientParts[2];
+            }
+            return false;
+          });
+          if (!isAllowed) {
+            throw new ConflictException(
+              `Access Denied: You are not connected to the authorized office WiFi network. Allowed IP(s): ${workspace.allowedWifiIp}. Your IP: ${cleanIp || 'unknown'}`
+            );
+          }
+        }
       }
 
       const checkInTime = open.checkInTime;
@@ -185,20 +248,21 @@ export class AttendanceService {
           notes: dto.notes,
           location: dto.location,
           deviceInfo: dto.deviceInfo,
+          verificationType,
         },
         tx,
       );
 
-      // Get date of the check-in session (UTC)
-      const dateOnly = new Date(Date.UTC(checkInTime.getUTCFullYear(), checkInTime.getUTCMonth(), checkInTime.getUTCDate()));
+      // Get date of the check-in session (Kolkata timezone range)
+      const dateOnly = getKolkataDate(checkInTime);
 
       // Fetch all sessions for today
       const rawSessions = await tx.attendanceSession.findMany({
         where: {
           userId,
           checkInTime: {
-            gte: new Date(dateOnly.getTime()),
-            lte: new Date(dateOnly.getTime() + 24 * 60 * 60 * 1000 - 1),
+            gte: new Date(dateOnly.getTime() - 5.5 * 60 * 60 * 1000),
+            lte: new Date(dateOnly.getTime() + 24 * 60 * 60 * 1000 - 1 - 5.5 * 60 * 60 * 1000),
           },
         },
         orderBy: { checkInTime: 'asc' },
@@ -237,6 +301,7 @@ export class AttendanceService {
           workedMinutes: totalWorkMinutes,
           breakMinutes: totalBreakMinutes,
           status,
+          verificationType,
         },
         tx,
       );
@@ -254,12 +319,126 @@ export class AttendanceService {
     });
   }
 
+  async checkInWifi(userId: string, dto: CheckInDto, clientIp: string) {
+    return this.checkIn(userId, dto, clientIp, 'WIFI');
+  }
+
+  async checkOutWifi(userId: string, dto: CheckOutDto, clientIp: string) {
+    return this.checkOut(userId, dto, clientIp, 'WIFI');
+  }
+
+  private _calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+    const R = 6371e3; // Earth's radius in meters
+    const φ1 = (lat1 * Math.PI) / 180;
+    const φ2 = (lat2 * Math.PI) / 180;
+    const Δφ = ((lat2 - lat1) * Math.PI) / 180;
+    const Δλ = ((lon2 - lon1) * Math.PI) / 180;
+
+    const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+              Math.cos(φ1) * Math.cos(φ2) *
+              Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+    return R * c; // in meters
+  }
+
+  async checkInLocation(userId: string, dto: GPSCheckInDto) {
+    const user = await this.userRepo.findById(userId);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+    if (!user.workspaceId) {
+      throw new ConflictException('User is not associated with any workspace');
+    }
+
+    const workspace = await this.prisma.workspace.findUnique({
+      where: { id: user.workspaceId },
+    });
+
+    if (!workspace) {
+      throw new NotFoundException('Workspace not found');
+    }
+
+    if (workspace.latitude === null || workspace.longitude === null) {
+      throw new BadRequestException('Workspace geofencing coordinates are not configured by the admin.');
+    }
+
+    const distance = this._calculateDistance(
+      dto.latitude,
+      dto.longitude,
+      workspace.latitude,
+      workspace.longitude,
+    );
+
+    const radius = workspace.geofenceRadius ?? 100;
+
+    if (distance > radius) {
+      throw new ConflictException(
+        `Access Denied: You are outside the authorized office geofence. Distance: ${Math.round(distance)}m. Allowed Radius: ${radius}m.`
+      );
+    }
+
+    return this.checkIn(userId, dto, undefined, 'LOCATION');
+  }
+
+  async checkOutLocation(userId: string, dto: GPSCheckOutDto) {
+    const open = await this.attendanceRepo.findOpenSession(userId);
+    if (!open) {
+      throw new NotFoundException('No active check-in found');
+    }
+
+    const workspace = await this.prisma.workspace.findUnique({
+      where: { id: open.workspaceId },
+    });
+
+    if (!workspace) {
+      throw new NotFoundException('Workspace not found');
+    }
+
+    if (workspace.latitude === null || workspace.longitude === null) {
+      throw new BadRequestException('Workspace geofencing coordinates are not configured by the admin.');
+    }
+
+    const distance = this._calculateDistance(
+      dto.latitude,
+      dto.longitude,
+      workspace.latitude,
+      workspace.longitude,
+    );
+
+    const radius = workspace.geofenceRadius ?? 100;
+
+    if (distance > radius) {
+      throw new ConflictException(
+        `Access Denied: You are outside the authorized office geofence. Distance: ${Math.round(distance)}m. Allowed Radius: ${radius}m.`
+      );
+    }
+
+    return this.checkOut(userId, dto, undefined, 'LOCATION');
+  }
+
+  async checkInFace(userId: string, dto: FaceCheckInDto) {
+    if (!dto.facePhoto || dto.facePhoto.trim().length === 0) {
+      throw new BadRequestException('Face photo is required for Face ID verification.');
+    }
+    // Stub matching logic - simulate success
+    return this.checkIn(userId, dto, undefined, 'FACE_ID');
+  }
+
+  async checkOutFace(userId: string, dto: FaceCheckOutDto) {
+    if (!dto.facePhoto || dto.facePhoto.trim().length === 0) {
+      throw new BadRequestException('Face photo is required for Face ID verification.');
+    }
+    // Stub matching logic - simulate success
+    return this.checkOut(userId, dto, undefined, 'FACE_ID');
+  }
+
   async getTodayAttendance(userId: string) {
     const now = new Date();
-    const dateOnly = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    const dateOnly = getKolkataDate(now);
 
-    const from = new Date(dateOnly.getTime());
-    const to = new Date(dateOnly.getTime() + 24 * 60 * 60 * 1000 - 1);
+    const from = new Date(dateOnly.getTime() - 5.5 * 60 * 60 * 1000);
+    const to = new Date(dateOnly.getTime() + 24 * 60 * 60 * 1000 - 1 - 5.5 * 60 * 60 * 1000);
     const sessions = await this.attendanceRepo.findSessionsByUserIdInRange(userId, from, to);
     const summary = await this.attendanceRepo.findDailySummary(userId, dateOnly);
 
@@ -278,6 +457,15 @@ export class AttendanceService {
 
   async getStatus(userId: string) {
     const openSession = await this.attendanceRepo.findOpenSession(userId);
+    const user = await this.userRepo.findById(userId);
+    let allowedWifiIp: string | null = null;
+    if (user && user.workspaceId) {
+      const workspace = await this.prisma.workspace.findUnique({
+        where: { id: user.workspaceId },
+      });
+      allowedWifiIp = workspace?.allowedWifiIp ?? null;
+    }
+
     if (openSession) {
       return {
         isCheckedIn: true,
@@ -286,12 +474,14 @@ export class AttendanceService {
           checkInTime: openSession.checkInTime,
           location: openSession.location,
         },
+        allowedWifiIp,
       };
     }
     
     return {
       isCheckedIn: false,
       session: null,
+      allowedWifiIp,
     };
   }
 
@@ -497,8 +687,9 @@ export class AttendanceService {
     const now = new Date();
 
     if (query.date) {
-      const from = new Date(`${query.date}T00:00:00.000Z`);
-      const to = new Date(`${query.date}T23:59:59.999Z`);
+      const dateOnly = new Date(`${query.date}T00:00:00.000Z`);
+      const from = new Date(dateOnly.getTime() - 5.5 * 60 * 60 * 1000);
+      const to = new Date(dateOnly.getTime() + 24 * 60 * 60 * 1000 - 1 - 5.5 * 60 * 60 * 1000);
       return { from, to };
     }
 
@@ -544,5 +735,236 @@ export class AttendanceService {
     const diff = now.getUTCDate() - day + (day === 0 ? -6 : 1); // adjust when day is sunday
     const monday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), diff));
     return monday;
+  }
+
+  private _getWeekBounds(date: Date) {
+    const d = new Date(date);
+    const day = d.getUTCDay();
+    const diff = d.getUTCDate() - day + (day === 0 ? -6 : 1);
+    const monday = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), diff, 0, 0, 0, 0));
+    const sunday = new Date(monday);
+    sunday.setUTCDate(monday.getUTCDate() + 6);
+    sunday.setUTCHours(23, 59, 59, 999);
+    return { monday, sunday };
+  }
+
+  async submitRegularization(userId: string, dto: RegularizeAttendanceDto) {
+    const reqDate = new Date(dto.date);
+    const { monday, sunday } = this._getWeekBounds(reqDate);
+
+    // Limit check: weekly limit of 2 requests (PENDING or APPROVED)
+    const count = await this.prisma.attendanceRegularization.count({
+      where: {
+        userId,
+        date: {
+          gte: monday,
+          lte: sunday,
+        },
+        status: { in: ['PENDING', 'APPROVED'] },
+      },
+    });
+
+    if (count >= 2) {
+      throw new BadRequestException('You have exceeded the weekly limit of 2 regularization requests for this week.');
+    }
+
+    // Check if this request is a "late push"
+    let isLatePush = false;
+    if (dto.type === 'CHECK_IN' || dto.type === 'BOTH') {
+      if (dto.checkIn) {
+        const ciDate = new Date(dto.checkIn);
+        const h = ciDate.getUTCHours();
+        const m = ciDate.getUTCMinutes();
+        if (h > 9 || (h === 9 && m > 30)) {
+          isLatePush = true;
+        }
+      }
+      const existingAttendance = await this.prisma.attendance.findUnique({
+        where: { userId_date: { userId, date: reqDate } },
+      });
+      if (existingAttendance && existingAttendance.status === 'LATE') {
+        isLatePush = true;
+      }
+    }
+
+    if (isLatePush) {
+      const existingRequests = await this.prisma.attendanceRegularization.findMany({
+        where: {
+          userId,
+          date: {
+            gte: monday,
+            lte: sunday,
+          },
+          status: { in: ['PENDING', 'APPROVED'] },
+        },
+      });
+
+      let latePushCount = 0;
+      for (const req of existingRequests) {
+        if (req.type === 'CHECK_IN' || req.type === 'BOTH') {
+          if (req.checkIn) {
+            const ci = new Date(req.checkIn);
+            if (ci.getUTCHours() > 9 || (ci.getUTCHours() === 9 && ci.getUTCMinutes() > 30)) {
+              latePushCount++;
+              continue;
+            }
+          }
+          const att = await this.prisma.attendance.findUnique({
+            where: { userId_date: { userId: req.userId, date: req.date } },
+          });
+          if (att && att.status === 'LATE') {
+            latePushCount++;
+          }
+        }
+      }
+
+      if (latePushCount >= 1) {
+        throw new BadRequestException('You have exceeded the limit of 1 late check-in correction request per week.');
+      }
+    }
+
+    const user = await this.userRepo.findById(userId);
+    if (!user || !user.workspaceId) {
+      throw new ConflictException('User is not associated with any workspace.');
+    }
+
+    const regularization = await this.prisma.attendanceRegularization.create({
+      data: {
+        workspaceId: user.workspaceId,
+        userId,
+        date: reqDate,
+        type: dto.type as any,
+        checkIn: dto.checkIn ? new Date(dto.checkIn) : null,
+        checkOut: dto.checkOut ? new Date(dto.checkOut) : null,
+        reason: dto.reason,
+        status: 'PENDING',
+      },
+    });
+
+    await this.auditService.log({
+      userId,
+      workspaceId: user.workspaceId,
+      action: 'ATTENDANCE_REGULARIZATION_SUBMIT',
+      module: 'ATTENDANCE',
+      newData: regularization,
+      detail: `Submitted regularization request for ${dto.date} (${dto.type})`,
+    });
+
+    return regularization;
+  }
+
+  async getRegularizations(userId: string, role: string, workspaceId: string, status?: string) {
+    const isAdminOrTL = ['ADMIN', 'SUPER_ADMIN', 'HR', 'TEAM_LEAD'].includes(role);
+    if (isAdminOrTL) {
+      return await this.prisma.attendanceRegularization.findMany({
+        where: {
+          workspaceId,
+          status: status ? (status as any) : undefined,
+        },
+        include: {
+          user: {
+            select: {
+              firstName: true,
+              lastName: true,
+              email: true,
+              employeeId: true,
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+    } else {
+      return await this.prisma.attendanceRegularization.findMany({
+        where: {
+          userId,
+          status: status ? (status as any) : undefined,
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+    }
+  }
+
+  async actionRegularization(id: string, adminId: string, status: 'APPROVED' | 'REJECTED', rejectionReason?: string) {
+    const req = await this.prisma.attendanceRegularization.findUnique({
+      where: { id },
+    });
+    if (!req) throw new NotFoundException('Regularization request not found');
+
+    const updated = await this.prisma.attendanceRegularization.update({
+      where: { id },
+      data: {
+        status: status as any,
+        rejectionReason: status === 'REJECTED' ? rejectionReason : null,
+        approvedById: adminId,
+        approvedAt: new Date(),
+      },
+    });
+
+    if (status === 'APPROVED') {
+      let workedMinutes = 0;
+      let checkInTime = req.checkIn;
+      let checkOutTime = req.checkOut;
+
+      const existingAtt = await this.prisma.attendance.findUnique({
+        where: { userId_date: { userId: req.userId, date: req.date } },
+      });
+
+      if (existingAtt) {
+        if (!checkInTime) checkInTime = existingAtt.checkIn;
+        if (!checkOutTime) checkOutTime = existingAtt.checkOut;
+      }
+
+      if (checkInTime && checkOutTime) {
+        const diffMs = checkOutTime.getTime() - checkInTime.getTime();
+        if (diffMs > 0) {
+          workedMinutes = Math.round(diffMs / 60000);
+        }
+      }
+
+      let lateMinutes = 0;
+      if (checkInTime) {
+        const h = checkInTime.getUTCHours();
+        const m = checkInTime.getUTCMinutes();
+        const threshold = 9 * 60 + 30; // 09:30 UTC
+        const current = h * 60 + m;
+        if (current > threshold) {
+          lateMinutes = current - threshold;
+        }
+      }
+
+      const statusStr = calculateAttendanceStatus(checkInTime, workedMinutes);
+
+      await this.prisma.attendance.upsert({
+        where: { userId_date: { userId: req.userId, date: req.date } },
+        create: {
+          workspaceId: req.workspaceId,
+          userId: req.userId,
+          date: req.date,
+          checkIn: checkInTime,
+          checkOut: checkOutTime,
+          workedMinutes,
+          lateMinutes,
+          status: statusStr,
+        },
+        update: {
+          checkIn: checkInTime,
+          checkOut: checkOutTime,
+          workedMinutes,
+          lateMinutes,
+          status: statusStr,
+        },
+      });
+    }
+
+    await this.auditService.log({
+      userId: adminId,
+      workspaceId: req.workspaceId,
+      action: `ATTENDANCE_REGULARIZATION_${status}`,
+      module: 'ATTENDANCE',
+      newData: updated,
+      detail: `${status} regularization request ${id} for user ${req.userId}`,
+    });
+
+    return updated;
   }
 }

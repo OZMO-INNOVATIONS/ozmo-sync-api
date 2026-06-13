@@ -36,29 +36,29 @@ export class StaffController {
   }
 
   @Get()
-  @Roles(Role.ADMIN, Role.HR)
-  async listStaff(@Query() query: StaffFilterDto) {
-    const data = await this.staffService.findAll(query);
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.HR, Role.TEAM_LEAD, Role.STAFF)
+  async listStaff(@Query() query: StaffFilterDto, @CurrentUser() actor: RequestUser) {
+    const data = await this.staffService.findAll(query, actor.workspaceId);
     return { message: 'Staff list fetched', data };
   }
 
   // /search and /filter must be declared BEFORE /:id to avoid shadowing
   @Get('search')
-  @Roles(Role.ADMIN, Role.HR)
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.HR, Role.TEAM_LEAD, Role.STAFF)
   async searchStaff(@Query() query: StaffSearchDto) {
     const data = await this.staffService.search(query.q);
     return { message: 'Search results', data };
   }
 
   @Get('filter')
-  @Roles(Role.ADMIN, Role.HR)
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.HR, Role.TEAM_LEAD, Role.STAFF)
   async filterStaff(@Query() dto: StaffFilterDto) {
     const data = await this.staffService.filter(dto);
     return { message: 'Filtered results', data };
   }
 
   @Get(':id')
-  @Roles(Role.ADMIN, Role.HR, Role.TEAM_LEAD)
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.HR, Role.TEAM_LEAD, Role.STAFF)
   async getStaffById(@Param('id') id: string) {
     const data = await this.staffService.findById(id);
     return { message: 'Staff member fetched', data };

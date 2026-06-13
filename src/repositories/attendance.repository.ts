@@ -14,6 +14,7 @@ export interface AttendanceSessionEntity {
   status: string;
   notes: string | null;
   createdAt: Date;
+  verificationType?: string | null;
 }
 
 export interface AttendanceEntity {
@@ -29,6 +30,7 @@ export interface AttendanceEntity {
   lateMinutes: number;
   status: string;
   createdAt: Date;
+  verificationType?: string | null;
 }
 
 @Injectable()
@@ -52,6 +54,7 @@ export class AttendanceRepository {
       status: session.status,
       notes: session.notes,
       createdAt: session.createdAt,
+      verificationType: session.verificationType,
     };
   }
 
@@ -69,6 +72,7 @@ export class AttendanceRepository {
       lateMinutes: record.lateMinutes,
       status: record.status,
       createdAt: record.createdAt,
+      verificationType: record.verificationType,
     };
   }
 
@@ -91,6 +95,7 @@ export class AttendanceRepository {
       notes?: string;
       location?: string;
       deviceInfo?: string;
+      verificationType?: string;
     },
     tx?: Prisma.TransactionClient,
   ): Promise<AttendanceSessionEntity> {
@@ -102,6 +107,7 @@ export class AttendanceRepository {
         notes: dto.notes,
         location: dto.location,
         deviceInfo: dto.deviceInfo,
+        verificationType: dto.verificationType,
         status: 'ACTIVE',
       },
     });
@@ -117,6 +123,7 @@ export class AttendanceRepository {
       notes?: string;
       location?: string;
       deviceInfo?: string;
+      verificationType?: string | null;
     },
     tx?: Prisma.TransactionClient,
   ): Promise<AttendanceSessionEntity | null> {
@@ -198,6 +205,7 @@ export class AttendanceRepository {
       overtimeMinutes?: number;
       lateMinutes?: number;
       status?: string;
+      verificationType?: string | null;
     },
     tx?: Prisma.TransactionClient,
   ): Promise<AttendanceEntity> {
@@ -212,6 +220,7 @@ export class AttendanceRepository {
       overtimeMinutes: dto.overtimeMinutes ?? 0,
       lateMinutes: dto.lateMinutes ?? 0,
       status: dto.status ?? 'PRESENT',
+      verificationType: dto.verificationType,
     };
 
     const record = await this.getClient(tx).attendance.upsert({

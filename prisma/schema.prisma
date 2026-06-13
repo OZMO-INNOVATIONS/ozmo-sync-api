@@ -102,6 +102,8 @@ model User {
   activityLogs       ActivityLog[]
   sessions           UserSession[]
   refreshTokens      RefreshToken[]
+  regularizations         AttendanceRegularization[] @relation("UserRegularizations")
+  approvedRegularizations AttendanceRegularization[] @relation("ApprovedByRegularizations")
 
   @@index([email])
   @@index([status])
@@ -122,6 +124,10 @@ model Workspace {
   isActive      Boolean         @default(true) @map("is_active")
   memberCount   Int             @default(0) @map("member_count")
   domain        String?         @db.VarChar(255)
+  allowedWifiIp String?         @map("allowed_wifi_ip") @db.VarChar(100)
+  latitude      Float?
+  longitude     Float?
+  geofenceRadius Float?         @default(100) @map("geofence_radius")
   suspendedAt   DateTime?       @map("suspended_at")
   suspendedBy   String?         @map("suspended_by") @db.VarChar(255)
   suspensionReason String?       @map("suspension_reason")
@@ -156,6 +162,8 @@ model Workspace {
   billing           WorkspaceBilling[]
   files             File[]
   sessions          UserSession[]
+  holidays          Holiday[]
+  regularizations   AttendanceRegularization[]
 
   @@map("workspaces")
 }
@@ -252,6 +260,7 @@ model Attendance {
   overtimeMinutes Int       @default(0) @map("overtime_minutes")
   lateMinutes     Int       @default(0) @map("late_minutes")
   status          String    @db.VarChar(50)
+  verificationType String?   @map("verification_type") @db.VarChar(50)
   createdAt       DateTime  @default(now()) @map("created_at")
   updatedAt       DateTime  @default(now()) @updatedAt @map("updated_at")
   deletedAt       DateTime? @map("deleted_at")
@@ -275,6 +284,7 @@ model AttendanceSession {
   location        String?   @db.Text
   deviceInfo      String?   @map("device_info") @db.Text
   status          String    @default("ACTIVE") @db.VarChar(30)
+  verificationType String?  @map("verification_type") @db.VarChar(50)
   notes           String?   @db.Text
   createdAt       DateTime  @default(now()) @map("created_at")
   updatedAt       DateTime  @default(now()) @updatedAt @map("updated_at")
@@ -521,6 +531,7 @@ model Notification {
   deletedAt   DateTime? @map("deleted_at")
   createdBy   String?   @map("created_by") @db.Uuid
   updatedBy   String?   @map("updated_by") @db.Uuid
+  actionId    String?   @map("action_id") @db.VarChar(100)
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -777,4 +788,56 @@ enum CandidateSource {
   CAREERS_PORTAL
   REFERRAL
   MANUAL
+}
+
+model Holiday {
+  id           String    @id @default(uuid()) @db.Uuid
+  workspaceId  String?   @map("workspace_id") @db.Uuid
+  name         String    @db.VarChar(255)
+  date         DateTime  @db.Date
+  type         String    @default("publicHoliday") @db.VarChar(50)
+  description  String?   @db.Text
+  notes        String?   @db.Text
+  repeatYearly Boolean   @default(true) @map("repeat_yearly")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  workspace    Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@map("holidays")
+}
+
+enum RegularizationType {
+  CHECK_IN
+  CHECK_OUT
+  BOTH
+}
+
+enum RegularizationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model AttendanceRegularization {
+  id              String               @id @default(uuid()) @db.Uuid
+  workspaceId     String               @map("workspace_id") @db.Uuid
+  userId          String               @map("user_id") @db.Uuid
+  date            DateTime             @db.Date
+  type            RegularizationType
+  checkIn         DateTime?            @map("check_in")
+  checkOut        DateTime?            @map("check_out")
+  reason          String               @db.Text
+  status          RegularizationStatus @default(PENDING)
+  rejectionReason String?              @map("rejection_reason") @db.Text
+  approvedById    String?              @map("approved_by_id") @db.Uuid
+  approvedAt      DateTime?            @map("approved_at")
+  createdAt       DateTime             @default(now()) @map("created_at")
+  updatedAt       DateTime             @default(now()) @updatedAt @map("updated_at")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation("UserRegularizations", fields: [userId], references: [id], onDelete: Cascade)
+  approvedBy User?    @relation("ApprovedByRegularizations", fields: [approvedById], references: [id])
+
+  @@map("attendance_regularizations")
 }

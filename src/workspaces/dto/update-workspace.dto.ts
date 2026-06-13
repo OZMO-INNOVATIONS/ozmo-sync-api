@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsEmail, IsEnum, MaxLength, IsBoolean, IsArray } from 'class-validator';
+import { IsString, IsOptional, IsEmail, IsEnum, MaxLength, IsBoolean, IsArray, IsNumber } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { WorkspacePlan } from '../../repositories/workspaces.repository';
 
@@ -112,4 +112,20 @@ export class UpdateWorkspaceDto {
   @IsOptional()
   @IsBoolean()
   birthdayAlerts?: boolean;
+
+  @IsOptional()
+  @IsString()
+  allowedWifiIp?: string;
+
+  @IsOptional()
+  @IsNumber()
+  latitude?: number;
+
+  @IsOptional()
+  @IsNumber()
+  longitude?: number;
+
+  @IsOptional()
+  @IsNumber()
+  geofenceRadius?: number;
 }

@@ -17,6 +17,10 @@ export interface WorkspaceEntity {
   isActive: boolean;
   memberCount: number;
   domain?: string;
+  allowedWifiIp?: string;
+  latitude?: number;
+  longitude?: number;
+  geofenceRadius?: number;
   suspendedAt?: string;
   suspendedBy?: string;
   suspensionReason?: string;
@@ -47,6 +51,10 @@ export class WorkspacesRepository {
       isActive: ws.isActive,
       memberCount: ws.memberCount,
       domain: ws.domain ?? undefined,
+      allowedWifiIp: ws.allowedWifiIp ?? undefined,
+      latitude: ws.latitude ?? undefined,
+      longitude: ws.longitude ?? undefined,
+      geofenceRadius: ws.geofenceRadius ?? undefined,
       suspendedAt: ws.suspendedAt ? ws.suspendedAt.toISOString() : undefined,
       suspendedBy: ws.suspendedBy ?? undefined,
       suspensionReason: ws.suspensionReason ?? undefined,
@@ -72,6 +80,7 @@ export class WorkspacesRepository {
     isActive?: boolean;
     memberCount?: number;
     domain?: string;
+    allowedWifiIp?: string;
     createdBy?: string;
   }): Promise<WorkspaceEntity> {
     const ws = await this.prisma.workspace.create({
@@ -88,6 +97,7 @@ export class WorkspacesRepository {
         isActive: dto.isActive ?? true,
         memberCount: dto.memberCount ?? 0,
         domain: dto.domain,
+        allowedWifiIp: dto.allowedWifiIp,
         createdBy: dto.createdBy,
       },
     });
@@ -129,6 +139,10 @@ export class WorkspacesRepository {
       if (updates.isActive !== undefined) data.isActive = updates.isActive;
       if (updates.memberCount !== undefined) data.memberCount = updates.memberCount;
       if (updates.domain !== undefined) data.domain = updates.domain;
+      if (updates.allowedWifiIp !== undefined) data.allowedWifiIp = updates.allowedWifiIp;
+      if (updates.latitude !== undefined) data.latitude = updates.latitude;
+      if (updates.longitude !== undefined) data.longitude = updates.longitude;
+      if (updates.geofenceRadius !== undefined) data.geofenceRadius = updates.geofenceRadius;
       if (updates.deletedAt !== undefined) data.deletedAt = updates.deletedAt;
       if (updates.updatedBy !== undefined) data.updatedBy = updates.updatedBy;
       if (updates.suspendedAt !== undefined) data.suspendedAt = updates.suspendedAt ? new Date(updates.suspendedAt) : null;

@@ -1937,6 +1937,388 @@ curl -X PUT http://localhost:4000/api/v1/leaves/lv_102/status \
 
 ---
 
+### Audit Logs
+
+#### Fetch Audit Logs
+
+**`GET /api/v1/audit`** — Auth: Bearer token | Roles: `SUPER_ADMIN`, `ADMIN`, `HR`
+
+##### Query Parameters
+
+All parameters are optional.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `action` | string | Filter logs by specific action name |
+| `entityType` | string | Filter logs by entity type/module |
+| `actorId` | string | Filter logs by user ID (actor) |
+| `workspaceId` | string | Filter logs by workspace ID |
+| `from` | string (ISO-8601) | Filter logs starting from date |
+| `to` | string (ISO-8601) | Filter logs up to date |
+| `limit` | number | Page size limit (default `50`, max `200`) |
+| `offset` | number | Page offset (default `0`) |
+
+##### Response — `200 OK`
+
+```json
+{
+  "success": true,
+  "message": "Audit logs retrieved",
+  "data": {
+    "entries": [
+      {
+        "id": "ad_89c81b24-11e2-45e3-9824-a78c1873130d",
+        "action": "DATA_EXPORTED",
+        "entityType": "ATTENDANCE",
+        "entityId": "ad_89c81b24-11e2-45e3-9824-a78c1873130d",
+        "actor": "admin@company.com",
+        "actorId": "9a6c910a-bd46-4aa2-b459-f21c0f6c5bfc",
+        "ipAddress": "127.0.0.1",
+        "workspaceId": "790cb3f8-bcac-444c-9c79-f66dc33f9818",
+        "detail": "Exported ATTENDANCE as CSV — attendance_report.csv",
+        "timestamp": "2026-06-09T15:35:00.000Z"
+      }
+    ],
+    "total": 1,
+    "limit": 50,
+    "offset": 0
+  },
+  "timestamp": "2026-06-09T15:35:00.000Z"
+}
+```
+
+```bash
+curl http://localhost:4000/api/v1/audit?limit=10 \
+  -H "Authorization: Bearer <ACCESS_TOKEN>"
+```
+
+---
+
+#### Get Entity Audit Log
+
+**`GET /api/v1/audit/:entityId`** — Auth: Bearer token | Roles: `SUPER_ADMIN`, `ADMIN`, `HR`
+
+##### Response — `200 OK`
+
+```json
+{
+  "success": true,
+  "message": "Entity audit log retrieved",
+  "data": [
+    {
+      "id": "ad_89c81b24-11e2-45e3-9824-a78c1873130d",
+      "action": "DATA_EXPORTED",
+      "entityType": "ATTENDANCE",
+      "entityId": "ad_89c81b24-11e2-45e3-9824-a78c1873130d",
+      "actor": "admin@company.com",
+      "actorId": "9a6c910a-bd46-4aa2-b459-f21c0f6c5bfc",
+      "ipAddress": "127.0.0.1",
+      "workspaceId": "790cb3f8-bcac-444c-9c79-f66dc33f9818",
+      "detail": "Exported ATTENDANCE as CSV — attendance_report.csv",
+      "timestamp": "2026-06-09T15:35:00.000Z"
+    }
+  ],
+  "timestamp": "2026-06-09T15:35:00.000Z"
+}
+```
+
+```bash
+curl http://localhost:4000/api/v1/audit/ad_89c81b24-11e2-45e3-9824-a78c1873130d \
+  -H "Authorization: Bearer <ACCESS_TOKEN>"
+```
+
+---
+
+### Notifications
+
+#### Fetch Notifications
+
+**`GET /api/v1/notifications`** — Auth: Bearer token | Roles: Any
+
+##### Response — `200 OK`
+
+```json
+{
+  "success": true,
+  "message": "Notifications fetched successfully",
+  "data": [
+    {
+      "id": "nt_89cb18e4-18c7-4ab2-921a-c71b162f48da",
+      "workspaceId": "790cb3f8-bcac-444c-9c79-f66dc33f9818",
+      "userId": "9a6c910a-bd46-4aa2-b459-f21c0f6c5bfc",
+      "title": "Leave Approved",
+      "message": "Your leave request for 2026-06-15 has been approved.",
+      "type": "leaveAlerts",
+      "isRead": false,
+      "actionId": "lv_102",
+      "createdAt": "2026-06-09T15:35:00.000Z",
+      "updatedAt": "2026-06-09T15:35:00.000Z",
+      "deletedAt": null,
+      "createdBy": null,
+      "updatedBy": null
+    }
+  ],
+  "timestamp": "2026-06-09T15:35:00.000Z"
+}
+```
+
+```bash
+curl http://localhost:4000/api/v1/notifications \
+  -H "Authorization: Bearer <ACCESS_TOKEN>"
+```
+
+---
+
+#### Mark Notification as Read
+
+**`PATCH /api/v1/notifications/:id/read`** — Auth: Bearer token | Roles: Any
+
+##### Response — `200 OK`
+
+```json
+{
+  "success": true,
+  "message": "Notification marked as read",
+  "data": {
+    "id": "nt_89cb18e4-18c7-4ab2-921a-c71b162f48da",
+    "workspaceId": "790cb3f8-bcac-444c-9c79-f66dc33f9818",
+    "userId": "9a6c910a-bd46-4aa2-b459-f21c0f6c5bfc",
+    "title": "Leave Approved",
+    "message": "Your leave request for 2026-06-15 has been approved.",
+    "type": "leaveAlerts",
+    "isRead": true,
+    "actionId": "lv_102",
+    "createdAt": "2026-06-09T15:35:00.000Z",
+    "updatedAt": "2026-06-09T15:35:00.000Z",
+    "deletedAt": null,
+    "createdBy": null,
+    "updatedBy": null
+  },
+  "timestamp": "2026-06-09T15:35:00.000Z"
+}
+```
+
+```bash
+curl -X PATCH http://localhost:4000/api/v1/notifications/nt_89cb18e4-18c7-4ab2-921a-c71b162f48da/read \
+  -H "Authorization: Bearer <ACCESS_TOKEN>"
+```
+
+---
+
+#### Mark All Notifications as Read
+
+**`POST /api/v1/notifications/read-all`** — Auth: Bearer token | Roles: Any
+
+##### Response — `200 OK`
+
+```json
+{
+  "success": true,
+  "message": "All notifications marked as read",
+  "data": {
+    "success": true
+  },
+  "timestamp": "2026-06-09T15:35:00.000Z"
+}
+```
+
+```bash
+curl -X POST http://localhost:4000/api/v1/notifications/read-all \
+  -H "Authorization: Bearer <ACCESS_TOKEN>"
+```
+
+---
+
+### Holidays
+
+#### Fetch Holidays
+
+**`GET /api/v1/holidays`** — Auth: Bearer token | Roles: Any
+
+##### Response — `200 OK`
+
+```json
+{
+  "success": true,
+  "message": "Holidays fetched successfully",
+  "data": [
+    {
+      "id": "hl_5bca29ef-1e23-4b9d-adbc-c781bf6d182e",
+      "workspaceId": "790cb3f8-bcac-444c-9c79-f66dc33f9818",
+      "name": "Independence Day",
+      "date": "2026-07-04T00:00:00.000Z",
+      "type": "publicHoliday",
+      "description": "National holiday celebrating independence.",
+      "notes": "Office closed.",
+      "repeatYearly": true,
+      "createdAt": "2026-06-09T15:35:00.000Z",
+      "updatedAt": "2026-06-09T15:35:00.000Z"
+    }
+  ],
+  "timestamp": "2026-06-09T15:35:00.000Z"
+}
+```
+
+```bash
+curl http://localhost:4000/api/v1/holidays \
+  -H "Authorization: Bearer <ACCESS_TOKEN>"
+```
+
+---
+
+### Reports
+
+#### Export Data
+
+**`GET /api/v1/reports/export`** — Auth: Bearer token | Roles: `ADMIN`, `SUPER_ADMIN`, `HR`
+
+##### Query Parameters
+
+| Field | Type | Required | Description |
+| --- | --- | :---: | --- |
+| `module` | string | Yes | Module name to export (e.g. `ATTENDANCE`, `LEAVES`, `STAFF`, `HOLIDAYS`) |
+| `format` | string | Yes | Export file format (`CSV` or `PDF`) |
+| `from` | string | No | Filter data from start date (ISO-8601) |
+| `to` | string | No | Filter data to end date (ISO-8601) |
+
+##### Response — `200 OK`
+
+Returns the generated file stream as a downloadable attachment.
+
+```bash
+curl "http://localhost:4000/api/v1/reports/export?module=ATTENDANCE&format=CSV" \
+  -H "Authorization: Bearer <ACCESS_TOKEN>" \
+  -o attendance_report.csv
+```
+
+---
+
+### Careers
+
+#### List Job Openings
+
+**`GET /api/v1/careers/jobs`** — Auth: Public | Roles: Public (No token required)
+
+##### Query Parameters
+
+All parameters are optional.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `department` | string | Filter jobs by department name |
+| `location` | string | Filter jobs by location |
+| `employmentType` | enum | Filter jobs by employment type (`FULL_TIME`, `PART_TIME`, `CONTRACT`, `INTERN`) |
+| `experienceLevel` | enum | Filter jobs by experience level (`ENTRY`, `MID`, `SENIOR`, `LEAD`, `EXECUTIVE`) |
+| `search` | string | Keyword search on title/description |
+
+##### Response — `200 OK`
+
+```json
+{
+  "success": true,
+  "message": "Job listings retrieved",
+  "data": [
+    {
+      "id": "jb_f9bc2891-9e23-4ba9-adcd-e7c1bf8d132a",
+      "title": "Senior Flutter Developer",
+      "department": "Tech Division",
+      "experienceLevel": "SENIOR",
+      "employmentType": "FULL_TIME",
+      "description": "Looking for an expert Flutter engineer...",
+      "requirements": ["3+ years experience with Flutter", "Familiarity with clean architecture"],
+      "skills": ["Flutter", "Dart", "BLoC", "Git"],
+      "location": "Remote (USA/Canada)",
+      "salaryMin": 90000,
+      "salaryMax": 120000,
+      "currency": "USD",
+      "vacancies": 2,
+      "status": "OPEN",
+      "workspaceId": "790cb3f8-bcac-444c-9c79-f66dc33f9818",
+      "workspaceName": "OZMO innovations",
+      "hideSalaryPublicly": false,
+      "applicantCount": 14,
+      "closingDate": "2026-07-31T00:00:00.000Z",
+      "createdAt": "2026-06-09T15:35:00.000Z",
+      "updatedAt": "2026-06-09T15:35:00.000Z"
+    }
+  ],
+  "timestamp": "2026-06-09T15:35:00.000Z"
+}
+```
+
+```bash
+curl http://localhost:4000/api/v1/careers/jobs?employmentType=FULL_TIME
+```
+
+---
+
+#### Apply for a Job
+
+**`POST /api/v1/careers/jobs/:jobId/apply`** — Auth: Public | Roles: Public (No token required)
+
+Accepts a multipart form-data request.
+
+##### Request Body (Form Data)
+
+| Field | Type | Required | Description |
+| --- | --- | :---: | --- |
+| `firstName` | string | Yes | Applicant's first name |
+| `lastName` | string | Yes | Applicant's last name |
+| `email` | string | Yes | Applicant's email address |
+| `phone` | string | Yes | Applicant's phone number |
+| `currentDesignation` | string | Yes | Current designation |
+| `experienceYears` | number | Yes | Total years of experience |
+| `education` | string | Yes | Highest education degree |
+| `skills` | string/array | Yes | Array or list of skills (comma-separated if string) |
+| `portfolioUrl` | string | No | Portfolio/LinkedIn URL |
+| `coverLetter` | string | No | Optional cover letter text |
+| `resume` | File | No | Upload resume (PDF, DOC, DOCX up to 5MB) |
+
+##### Response — `201 Created`
+
+```json
+{
+  "success": true,
+  "message": "Application submitted successfully",
+  "data": {
+    "id": "cd_29bc38e4-18c7-4ab2-921a-c71b162f48da",
+    "jobId": "jb_f9bc2891-9e23-4ba9-adcd-e7c1bf8d132a",
+    "firstName": "Jane",
+    "lastName": "Doe",
+    "email": "jane.doe@example.com",
+    "phone": "+1234567890",
+    "currentDesignation": "Software Engineer",
+    "experienceYears": 4,
+    "education": "BS in Computer Science",
+    "skills": ["Flutter", "Dart"],
+    "portfolioUrl": "https://linkedin.com/in/janedoe",
+    "coverLetter": "Excited about this opportunity...",
+    "resumeUrl": "uploads/resumes/17812948291_resume.pdf",
+    "stage": "APPLIED",
+    "hasPortalAccess": false,
+    "source": "CAREERS_PORTAL",
+    "appliedAt": "2026-06-10T12:00:00.000Z",
+    "createdAt": "2026-06-10T12:00:00.000Z"
+  },
+  "timestamp": "2026-06-10T12:00:00.000Z"
+}
+```
+
+```bash
+curl -X POST http://localhost:4000/api/v1/careers/jobs/jb_f9bc2891-9e23-4ba9-adcd-e7c1bf8d132a/apply \
+  -F "firstName=Jane" \
+  -F "lastName=Doe" \
+  -F "email=jane.doe@example.com" \
+  -F "phone=+1234567890" \
+  -F "currentDesignation=Software Engineer" \
+  -F "experienceYears=4" \
+  -F "education=BS in Computer Science" \
+  -F "skills=Flutter,Dart" \
+  -F "resume=@/path/to/resume.pdf"
+```
+
+---
+
 ## Error Responses
 
 ### Validation Error — `400 Bad Request`

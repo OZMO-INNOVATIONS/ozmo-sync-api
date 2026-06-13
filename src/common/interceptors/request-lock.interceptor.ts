@@ -17,6 +17,11 @@ export class RequestLockInterceptor implements NestInterceptor {
     const request = context.switchToHttp().getRequest();
     const { method, url, body, user } = request;
 
+    // Skip lock for auth endpoints
+    if (url.includes('/auth/')) {
+      return next.handle();
+    }
+
     // Only lock mutating requests
     if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(method)) {
       const userId = user?.id || 'anonymous';

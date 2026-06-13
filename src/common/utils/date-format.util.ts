@@ -22,16 +22,32 @@ function toDate(value: string | Date | null | undefined): Date | null {
 }
 
 /**
+ * Shifts a UTC date by 5h 30m to represent it in Kolkata time.
+ */
+function toKolkataTime(d: Date): Date {
+  return new Date(d.getTime() + 5.5 * 60 * 60 * 1000);
+}
+
+/**
+ * Returns a midnight Date representation for the Kolkata day.
+ */
+export function getKolkataDate(d: Date): Date {
+  const kolkataTime = toKolkataTime(d);
+  return new Date(Date.UTC(kolkataTime.getUTCFullYear(), kolkataTime.getUTCMonth(), kolkataTime.getUTCDate()));
+}
+
+/**
  * "06 Jun 2026, 01:29 PM"
  */
 export function formatDateTime(value: string | Date | null | undefined): string | null {
   const d = toDate(value);
   if (!d) return null;
-  const dd = String(d.getUTCDate()).padStart(2, '0');
-  const mon = MONTHS[d.getUTCMonth()];
-  const yyyy = d.getUTCFullYear();
-  const hh24 = d.getUTCHours();
-  const mm = String(d.getUTCMinutes()).padStart(2, '0');
+  const kolkataTime = toKolkataTime(d);
+  const dd = String(kolkataTime.getUTCDate()).padStart(2, '0');
+  const mon = MONTHS[kolkataTime.getUTCMonth()];
+  const yyyy = kolkataTime.getUTCFullYear();
+  const hh24 = kolkataTime.getUTCHours();
+  const mm = String(kolkataTime.getUTCMinutes()).padStart(2, '0');
   const period = hh24 >= 12 ? 'PM' : 'AM';
   const hh12 = hh24 % 12 === 0 ? 12 : hh24 % 12;
   return `${dd} ${mon} ${yyyy}, ${String(hh12).padStart(2, '0')}:${mm} ${period}`;
@@ -43,9 +59,10 @@ export function formatDateTime(value: string | Date | null | undefined): string 
 export function formatDate(value: string | Date | null | undefined): string | null {
   const d = toDate(value);
   if (!d) return null;
-  const dd = String(d.getUTCDate()).padStart(2, '0');
-  const mon = MONTHS[d.getUTCMonth()];
-  const yyyy = d.getUTCFullYear();
+  const kolkataTime = toKolkataTime(d);
+  const dd = String(kolkataTime.getUTCDate()).padStart(2, '0');
+  const mon = MONTHS[kolkataTime.getUTCMonth()];
+  const yyyy = kolkataTime.getUTCFullYear();
   return `${dd} ${mon} ${yyyy}`;
 }
 
@@ -55,8 +72,9 @@ export function formatDate(value: string | Date | null | undefined): string | nu
 export function formatTime(value: string | Date | null | undefined): string | null {
   const d = toDate(value);
   if (!d) return null;
-  const hh24 = d.getUTCHours();
-  const mm = String(d.getUTCMinutes()).padStart(2, '0');
+  const kolkataTime = toKolkataTime(d);
+  const hh24 = kolkataTime.getUTCHours();
+  const mm = String(kolkataTime.getUTCMinutes()).padStart(2, '0');
   const period = hh24 >= 12 ? 'PM' : 'AM';
   const hh12 = hh24 % 12 === 0 ? 12 : hh24 % 12;
   return `${String(hh12).padStart(2, '0')}:${mm} ${period}`;

@@ -16,6 +16,7 @@ import { StaffFilterDto } from './dto/staff-filter.dto';
 import { UserStatus, Role } from '../common/constants/roles.enum';
 import { RequestUser } from '../common/interfaces/request-user.interface';
 import { AuditService } from '../audit/audit.service';
+import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class StaffService {
@@ -25,6 +26,7 @@ export class StaffService {
     private readonly workspaceMemberRepo: WorkspaceMemberRepository,
     private readonly configService: ConfigService,
     private readonly auditService: AuditService,
+    private readonly prisma: PrismaService,
   ) {}
 
   async create(dto: CreateStaffDto, actor: RequestUser) {
@@ -103,14 +105,16 @@ export class StaffService {
     };
   }
 
-  async findAll(query?: StaffFilterDto) {
+  async findAll(query?: StaffFilterDto, workspaceId?: string) {
+    let users: any[];
     if (query) {
-      const users = await this.userRepo.findFilteredPaged(
+      users = await this.userRepo.findFilteredPaged(
         {
           department: query.department,
           status: query.status,
           role: query.role,
           search: query.search,
+          workspaceId,
         },
         {
           page: query.page,
@@ -118,10 +122,32 @@ export class StaffService {
           sort: query.sort,
         }
       );
-      return users.map((u) => this._sanitize(u));
+    } else {
+      if (workspaceId) {
+        users = await this.userRepo.findFilteredPaged({ workspaceId }, { limit: 1000 });
+      } else {
+        users = await this.userRepo.findAll();
+      }
     }
-    const users = await this.userRepo.findAll();
-    return users.map((u) => this._sanitize(u));
+
+    const today = new Date();
+    const todayDateOnly = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+
+    const attendanceRecords = await this.prisma.attendance.findMany({
+      where: {
+        date: todayDateOnly,
+        userId: { in: users.map((u) => u.id) },
+        deletedAt: null,
+      },
+    });
+
+    return users.map((u) => {
+      const record = attendanceRecords.find((r) => r.userId === u.id);
+      return {
+        ...this._sanitize(u),
+        attendanceStatus: record ? record.status : 'ABSENT',
+      };
+    });
   }
 
   async findById(id: string) {

@@ -3,6 +3,7 @@ import {
   NotFoundException,
   ConflictException,
   UnprocessableEntityException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { WorkspacesRepository } from '../repositories/workspaces.repository';
 import { UserRepository } from '../repositories/user.repository';
@@ -40,24 +41,32 @@ export class WorkspacesService {
       include: { user: true },
     });
 
-    const staffInWorkspace = members.map((m) => {
-      const { password, ...safe } = m.user;
-      void password;
-      return {
-        ...safe,
-        role: m.role,
-        status: m.status,
-      };
-    });
+    const todayStr = new Date().toISOString().split('T')[0];
 
     const attendance = await this.prisma.attendance.findMany({
       where: { workspaceId: workspace.id, deletedAt: null },
     });
 
+    const staffInWorkspace = members.map((m) => {
+      const { password, ...safe } = m.user;
+      void password;
+
+      const userTodayAttendance = attendance.find((a) => {
+        const isToday = a.date.toISOString().startsWith(todayStr);
+        return a.userId === m.user.id && isToday;
+      });
+
+      return {
+        ...safe,
+        role: m.role,
+        status: m.status,
+        attendanceStatus: userTodayAttendance ? userTodayAttendance.status : 'ABSENT',
+      };
+    });
+
     const totalEmployees = staffInWorkspace.length;
     const activeEmployees = staffInWorkspace.filter((u) => u.status === 'ACTIVE').length;
 
-    const todayStr = new Date().toISOString().split('T')[0];
     const presentToday = attendance.filter((r) => {
       const isToday = r.date.toISOString().startsWith(todayStr);
       return isToday && r.status === 'PRESENT';
@@ -134,11 +143,19 @@ export class WorkspacesService {
     const existing = await this.workspacesRepo.findById(id);
     if (!existing) throw new NotFoundException('Workspace not found');
 
+    if (actor.role !== 'SUPER_ADMIN' && actor.workspaceId !== id) {
+      throw new ForbiddenException('You do not have permission to update this workspace');
+    }
+
     const updated = await this.workspacesRepo.updateById(id, {
       name: dto.name,
       domain: dto.domain,
       plan: dto.plan,
       adminEmail: dto.adminEmail,
+      allowedWifiIp: dto.allowedWifiIp,
+      latitude: dto.latitude,
+      longitude: dto.longitude,
+      geofenceRadius: dto.geofenceRadius,
     });
 
     await this.auditService.log({

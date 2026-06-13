@@ -312,9 +312,14 @@ OZMO SYNC Team`;
     };
   }
 
-  async cancelInvitation(invitationId: string, admin: RequestUser) {
-    // 1. Find invitation
-    const invitation = await this.invitationRepo.findById(invitationId);
+  async cancelInvitation(invitationIdOrToken: string, admin: RequestUser) {
+    // 1. Find invitation (try ID first, fallback to token hash)
+    let invitation = await this.invitationRepo.findById(invitationIdOrToken);
+    if (!invitation) {
+      const tokenHash = crypto.createHash('sha256').update(invitationIdOrToken).digest('hex');
+      invitation = await this.invitationRepo.findByTokenHash(tokenHash);
+    }
+
     if (!invitation) {
       throw new NotFoundException('Invitation not found');
     }
@@ -330,11 +335,11 @@ OZMO SYNC Team`;
     }
 
     // 4. Update status to cancelled
-    await this.invitationRepo.updateStatus(invitation.id, 'cancelled');
+    await this.invitationRepo.updateStatus(invitation.id, 'REVOKED');
 
     return {
-      success: true,
-      message: 'Invitation cancelled successfully',
+      id: invitation.id,
+      status: 'REVOKED',
     };
   }
 
