@@ -29,4 +29,8 @@ export class UpdateStaffDto {
   @IsOptional()
   @IsISO8601()
   joiningDate?: string;
+
+  @IsOptional()
+  @IsString()
+  profilePhoto?: string;
 }

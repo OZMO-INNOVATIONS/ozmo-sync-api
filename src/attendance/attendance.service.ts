@@ -466,22 +466,164 @@ export class AttendanceService {
       allowedWifiIp = workspace?.allowedWifiIp ?? null;
     }
 
-    if (openSession) {
-      return {
-        isCheckedIn: true,
-        session: {
-          id: openSession.id,
-          checkInTime: openSession.checkInTime,
-          location: openSession.location,
+    const today = new Date();
+    const dateOnly = getKolkataDate(today);
+
+    // Fetch all sessions for today (Kolkata timezone range)
+    const rawSessions = await this.prisma.attendanceSession.findMany({
+      where: {
+        userId,
+        checkInTime: {
+          gte: new Date(dateOnly.getTime() - 5.5 * 60 * 60 * 1000),
+          lte: new Date(dateOnly.getTime() + 24 * 60 * 60 * 1000 - 1 - 5.5 * 60 * 60 * 1000),
         },
-        allowedWifiIp,
-      };
+      },
+      orderBy: { checkInTime: 'asc' },
+    });
+
+    const summary = await this.attendanceRepo.findDailySummary(userId, dateOnly);
+
+    let currentStatus = 'Not Checked In';
+    let checkInTime: Date | null = null;
+    let checkOutTime: Date | null = null;
+    let todayDurationMinutes = 0;
+    let breakDurationMinutes = 0;
+
+    // Calculate break time
+    let totalBreakMinutes = 0;
+    for (let i = 1; i < rawSessions.length; i++) {
+      const prev = rawSessions[i - 1];
+      const curr = rawSessions[i];
+      if (prev.checkOutTime) {
+        const gapMs = curr.checkInTime.getTime() - prev.checkOutTime.getTime();
+        if (gapMs > 0) {
+          totalBreakMinutes += Math.round(gapMs / 60000);
+        }
+      }
     }
+    breakDurationMinutes = summary?.breakMinutes ?? totalBreakMinutes;
+
+    if (openSession) {
+      currentStatus = 'Checked In';
+      checkInTime = rawSessions[0]?.checkInTime || openSession.checkInTime;
+      // Worked minutes for completed sessions
+      const completedWorkMinutes = rawSessions.reduce((sum, s) => sum + (s.checkOutTime ? (s.durationMinutes ?? 0) : 0), 0);
+      // Active session minutes so far
+      const activeMs = today.getTime() - openSession.checkInTime.getTime();
+      const activeMinutes = Math.max(0, Math.round(activeMs / 60000));
+      todayDurationMinutes = completedWorkMinutes + activeMinutes;
+    } else if (summary && summary.checkIn) {
+      currentStatus = 'Checked Out';
+      checkInTime = summary.checkIn;
+      checkOutTime = summary.checkOut;
+      todayDurationMinutes = summary.workedMinutes;
+    }
+
+    const todayDuration = formatSummaryDuration(todayDurationMinutes);
+    const breakDuration = formatSummaryDuration(breakDurationMinutes);
+
+    return {
+      isCheckedIn: !!openSession,
+      status: currentStatus,
+      checkInTime,
+      checkOutTime,
+      todayDuration,
+      breakDuration,
+      todayDurationMinutes,
+      breakDurationMinutes,
+      allowedWifiIp,
+      session: openSession ? {
+        id: openSession.id,
+        checkInTime: openSession.checkInTime,
+        location: openSession.location,
+      } : null,
+    };
+  }
+
+  async getDailySummary(userId: string) {
+    const today = new Date();
+    const dateOnly = getKolkataDate(today);
+    const summary = await this.attendanceRepo.findDailySummary(userId, dateOnly);
+    
+    const dayOfWeek = today.getDay();
+    const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
     
     return {
-      isCheckedIn: false,
-      session: null,
-      allowedWifiIp,
+      todayAttendance: summary ? summary.status : (isWeekend ? 'WEEK_OFF' : 'ABSENT'),
+      workingTime: summary ? formatSummaryDuration(summary.workedMinutes) : '0h 0m',
+      status: summary ? summary.status : (isWeekend ? 'WEEK_OFF' : 'ABSENT'),
+    };
+  }
+
+  async getWeeklySummary(userId: string) {
+    const startOfWeek = this._startOfCurrentWeek();
+    const endOfWeek = new Date(startOfWeek.getTime() + 7 * 24 * 60 * 60 * 1000 - 1);
+
+    const summaries = await this.attendanceRepo.findDailySummariesInRange(userId, startOfWeek, endOfWeek);
+
+    const presentDays = summaries.filter((s) => ['PRESENT', 'LATE', 'HALF_DAY', 'WFH'].includes(s.status.toUpperCase())).length;
+    const absentDays = summaries.filter((s) => s.status.toUpperCase() === 'ABSENT').length;
+    const leaveDays = summaries.filter((s) => ['LEAVE', 'HALF_DAY_LEAVE'].includes(s.status.toUpperCase())).length;
+    
+    const weeklyMinutes = summaries.reduce((sum, s) => sum + s.workedMinutes, 0);
+    const weeklyHours = formatSummaryDuration(weeklyMinutes);
+
+    const totalWorkingDays = 5;
+    const attendancePercentage = totalWorkingDays > 0
+      ? Math.min(100, Math.round((presentDays / totalWorkingDays) * 100))
+      : 100;
+
+    const avgMinutes = presentDays > 0 ? Math.round(weeklyMinutes / presentDays) : 0;
+    const averageWorkingHours = formatSummaryDuration(avgMinutes);
+
+    return {
+      presentDays,
+      absentDays,
+      leaveDays,
+      weeklyHours,
+      averageWorkingHours,
+      attendancePercentage,
+    };
+  }
+
+  async getMonthlySummary(userId: string) {
+    const today = new Date();
+    const startOfMonth = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1));
+    const nextMonth = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() + 1, 1));
+    const endOfMonth = new Date(nextMonth.getTime() - 1);
+
+    const summaries = await this.attendanceRepo.findDailySummariesInRange(userId, startOfMonth, endOfMonth);
+
+    const presentDays = summaries.filter((s) => ['PRESENT', 'LATE', 'HALF_DAY', 'WFH'].includes(s.status.toUpperCase())).length;
+    const absentDays = summaries.filter((s) => s.status.toUpperCase() === 'ABSENT').length;
+    const leaveDays = summaries.filter((s) => ['LEAVE', 'HALF_DAY_LEAVE'].includes(s.status.toUpperCase())).length;
+    const lateEntries = summaries.filter((s) => s.status.toUpperCase() === 'LATE').length;
+
+    const monthlyMinutes = summaries.reduce((sum, s) => sum + s.workedMinutes, 0);
+    const monthlyHours = formatSummaryDuration(monthlyMinutes);
+
+    let workingDaysSoFar = 0;
+    const cur = new Date(startOfMonth);
+    const endLimit = today < endOfMonth ? today : endOfMonth;
+    while (cur <= endLimit) {
+      const day = cur.getUTCDay();
+      if (day !== 0 && day !== 6) {
+        workingDaysSoFar++;
+      }
+      cur.setUTCDate(cur.getUTCDate() + 1);
+    }
+
+    const attendancePercentage = workingDaysSoFar > 0
+      ? Math.min(100, Math.round((presentDays / workingDaysSoFar) * 100))
+      : 100;
+
+    return {
+      presentDays,
+      absentDays,
+      leaveDays,
+      lateEntries,
+      monthlyHours,
+      attendancePercentage,
     };
   }
 

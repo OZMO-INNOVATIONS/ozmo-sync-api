@@ -20,6 +20,7 @@ import { MeetingsModule } from './meetings/meetings.module';
 import { LeavesModule } from './leaves/leaves.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { HolidaysModule } from './holidays/holidays.module';
+import { DocumentsModule } from './documents/documents.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
@@ -49,6 +50,7 @@ import { WorkspaceIsolationMiddleware } from './common/middleware/workspace-isol
     NotificationsModule,
     HolidaysModule,
     CommonModule,
+    DocumentsModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },

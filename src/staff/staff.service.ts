@@ -77,6 +77,7 @@ export class StaffService {
       workspaceId,
       isFirstLogin: true,
       createdBy: actor.id,
+      profilePhoto: dto.profilePhoto,
     });
 
     await this.workspaceMemberRepo.create({

@@ -104,6 +104,7 @@ model User {
   refreshTokens      RefreshToken[]
   regularizations         AttendanceRegularization[] @relation("UserRegularizations")
   approvedRegularizations AttendanceRegularization[] @relation("ApprovedByRegularizations")
+  documents               EmployeeDocument[]
 
   @@index([email])
   @@index([status])
@@ -840,4 +841,57 @@ model AttendanceRegularization {
   approvedBy User?    @relation("ApprovedByRegularizations", fields: [approvedById], references: [id])
 
   @@map("attendance_regularizations")
+}
+
+enum DocumentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  UPDATE_REQUESTED
+  REUPLOAD_REQUESTED
+}
+
+model EmployeeDocument {
+  id              String         @id @default(uuid()) @db.Uuid
+  employeeId      String         @map("employee_id") @db.Uuid
+  documentType    String         @map("document_type") @db.VarChar(100)
+  name            String         @db.VarChar(255)
+  fileUrl         String         @map("file_url") @db.Text
+  status          DocumentStatus @default(PENDING)
+  rejectionReason String?        @map("rejection_reason") @db.Text
+  uploadDate      DateTime       @default(now()) @map("upload_date")
+  expiryDate      DateTime?      @map("expiry_date")
+  approvalDate    DateTime?      @map("approval_date")
+  updatedDate     DateTime?      @map("updated_date")
+  isCurrent       Boolean        @default(true) @map("is_current")
+  version         Int            @default(1)
+  parentId        String?        @map("parent_id") @db.Uuid
+
+  employee        User           @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  updateRequests  DocumentUpdateRequest[]
+
+  @@map("employee_documents")
+}
+
+enum RequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model DocumentUpdateRequest {
+  id           String        @id @default(uuid()) @db.Uuid
+  documentId   String        @map("document_id") @db.Uuid
+  employeeId   String        @map("employee_id") @db.Uuid
+  reason       String        @db.Text
+  newFileUrl   String        @map("new_file_url") @db.Text
+  newFileName  String        @map("new_file_name") @db.VarChar(255)
+  status       RequestStatus @default(PENDING)
+  createdAt    DateTime      @default(now()) @map("created_at")
+  resolvedAt   DateTime?     @map("resolved_at")
+  resolvedBy   String?       @map("resolved_by") @db.Uuid
+
+  document     EmployeeDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@map("document_update_requests")
 }

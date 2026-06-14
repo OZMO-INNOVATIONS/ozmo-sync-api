@@ -44,4 +44,8 @@ export class CreateStaffDto {
   @IsOptional()
   @IsISO8601()
   joiningDate?: string;
+
+  @IsOptional()
+  @IsString()
+  profilePhoto?: string;
 }

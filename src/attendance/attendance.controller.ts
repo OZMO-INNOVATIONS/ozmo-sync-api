@@ -129,6 +129,28 @@ export class AttendanceController {
     return { message: 'Attendance summary fetched', data };
   }
 
+  @Get('daily-summary')
+  @Roles(Role.STAFF, Role.TEAM_LEAD, Role.ADMIN, Role.HR)
+  async getDailySummary(@CurrentUser() user: RequestUser) {
+    const data = await this.attendanceService.getDailySummary(user.id);
+    return { message: 'Daily summary fetched', data };
+  }
+
+  @Get('weekly-summary')
+  @Roles(Role.STAFF, Role.TEAM_LEAD, Role.ADMIN, Role.HR)
+  async getWeeklySummary(@CurrentUser() user: RequestUser) {
+    const data = await this.attendanceService.getWeeklySummary(user.id);
+    return { message: 'Weekly summary fetched', data };
+  }
+
+  @Get('monthly-summary')
+  @Roles(Role.STAFF, Role.TEAM_LEAD, Role.ADMIN, Role.HR)
+  async getMonthlySummary(@CurrentUser() user: RequestUser) {
+    const data = await this.attendanceService.getMonthlySummary(user.id);
+    return { message: 'Monthly summary fetched', data };
+  }
+
+
   @Get('monthly-report')
   async getMonthlyReport(
     @CurrentUser() user: RequestUser,

@@ -80,11 +80,27 @@ export class DashboardService {
     }
     const todayHours = parseFloat((totalMinutes / 60).toFixed(1));
 
+    const pendingLeaves = await this.prisma.leaveRequest.count({
+      where: {
+        userId,
+        status: 'PENDING',
+        deletedAt: null,
+      },
+    });
+
+    const tasksAssigned = await this.prisma.task.count({
+      where: {
+        assignedTo: userId,
+        status: { not: 'COMPLETED' },
+        deletedAt: null,
+      },
+    });
+
     return {
       attendanceStatus,
       todayHours: todayHours || 0.0,
-      pendingLeaves: 1,
-      tasksAssigned: 5,
+      pendingLeaves,
+      tasksAssigned,
     };
   }
 }

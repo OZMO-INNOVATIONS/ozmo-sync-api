@@ -485,8 +485,7 @@ export class AuthService {
     );
 
     // Save token in DB relation
-    const hashedRefresh = await bcrypt.hash(refreshToken, 10);
-    await this.userRepo.saveRefreshToken(user.id, hashedRefresh);
+    await this.userRepo.saveRefreshToken(user.id, refreshToken);
 
     return { accessToken, refreshToken };
   }
