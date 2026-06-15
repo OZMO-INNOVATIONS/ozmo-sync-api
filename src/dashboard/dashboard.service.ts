@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { UserRepository } from '../repositories/user.repository';
 import { AttendanceRepository } from '../repositories/attendance.repository';
 import { WorkspacesRepository } from '../repositories/workspaces.repository';
+import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class DashboardService {
@@ -9,19 +10,26 @@ export class DashboardService {
     private readonly userRepo: UserRepository,
     private readonly attendanceRepo: AttendanceRepository,
     private readonly workspacesRepo: WorkspacesRepository,
+    private readonly prisma: PrismaService,
   ) {}
 
-  async getAdminDashboardStats(adminEmail: string) {
-    const workspaces = await this.workspacesRepo.findAll();
-    const workspace = workspaces.find((w) => w.adminEmail === adminEmail);
+  async getAdminDashboardStats(workspaceId: string) {
+    const workspace = await this.workspacesRepo.findById(workspaceId);
     if (!workspace) {
-      throw new NotFoundException('Workspace not found for this administrator');
+      throw new NotFoundException('Workspace not found');
     }
 
-    const staff = await this.userRepo.findAll();
-    const staffInWorkspace = staff.filter(
-      (u) => u.workspaceId === workspace.id || u.email.toLowerCase().trim() === adminEmail.toLowerCase().trim(),
-    );
+    const staffInWorkspace = await this.prisma.user.findMany({
+      where: {
+        deletedAt: null,
+        memberships: {
+          some: {
+            workspaceId,
+            deletedAt: null,
+          },
+        },
+      },
+    });
 
     const totalEmployees = staffInWorkspace.length;
     const now = new Date();
@@ -64,7 +72,7 @@ export class DashboardService {
 
     let totalMinutes = 0;
     for (const r of records) {
-      const checkInTime = new Date(r.checkInTime.includes(', ') ? `${r.checkInTime.split(', ')[0]} ${r.checkInTime.split(', ')[1]}` : r.checkInTime);
+      const checkInTime = r.checkInTime;
       const duration = r.durationMinutes !== null 
         ? r.durationMinutes 
         : Math.max(0, Math.round((Date.now() - checkInTime.getTime()) / 60000));
@@ -72,11 +80,27 @@ export class DashboardService {
     }
     const todayHours = parseFloat((totalMinutes / 60).toFixed(1));
 
+    const pendingLeaves = await this.prisma.leaveRequest.count({
+      where: {
+        userId,
+        status: 'PENDING',
+        deletedAt: null,
+      },
+    });
+
+    const tasksAssigned = await this.prisma.task.count({
+      where: {
+        assignedTo: userId,
+        status: { not: 'COMPLETED' },
+        deletedAt: null,
+      },
+    });
+
     return {
       attendanceStatus,
       todayHours: todayHours || 0.0,
-      pendingLeaves: 1,
-      tasksAssigned: 5,
+      pendingLeaves,
+      tasksAssigned,
     };
   }
 }

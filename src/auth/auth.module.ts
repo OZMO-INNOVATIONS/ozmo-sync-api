@@ -8,6 +8,7 @@ import { JwtStrategy } from './strategies/jwt.strategy';
 import { UserRepository } from '../repositories/user.repository';
 import { WorkspacesRepository } from '../repositories/workspaces.repository';
 import { InvitationRepository } from '../repositories/invitation.repository';
+import { WorkspaceMemberRepository } from '../repositories/workspace-member.repository';
 
 @Module({
   imports: [
@@ -30,7 +31,8 @@ import { InvitationRepository } from '../repositories/invitation.repository';
     UserRepository,
     WorkspacesRepository,
     InvitationRepository,
+    WorkspaceMemberRepository,
   ],
-  exports: [UserRepository, PassportModule],
+  exports: [UserRepository, WorkspaceMemberRepository, PassportModule, JwtModule],
 })
 export class AuthModule {}

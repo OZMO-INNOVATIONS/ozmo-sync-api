@@ -4,6 +4,7 @@ export interface RequestUser {
   id: string;
   email: string;
   role: Role;
-  employeeId: string;
+  employeeId?: string;
+  workspaceId?: string;
   isFirstLogin?: boolean;
 }

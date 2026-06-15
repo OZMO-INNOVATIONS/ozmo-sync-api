@@ -80,7 +80,31 @@ export class HttpExceptionFilter implements ExceptionFilter {
       );
     }
 
-    const body: Record<string, unknown> = { success: false, message, timestamp };
+    let errorCode = 'INTERNAL_SERVER_ERROR';
+    if (status === HttpStatus.BAD_REQUEST) errorCode = 'BAD_REQUEST';
+    else if (status === HttpStatus.UNAUTHORIZED) errorCode = 'UNAUTHORIZED';
+    else if (status === HttpStatus.FORBIDDEN) errorCode = 'FORBIDDEN';
+    else if (status === HttpStatus.NOT_FOUND) errorCode = 'NOT_FOUND';
+    else if (status === HttpStatus.CONFLICT) {
+      errorCode = message === 'REQUEST_ALREADY_IN_PROGRESS' ? 'REQUEST_ALREADY_IN_PROGRESS' : 'CONFLICT';
+    }
+
+    if (exception instanceof HttpException) {
+      const exceptionResponse = exception.getResponse();
+      if (typeof exceptionResponse === 'object' && exceptionResponse !== null) {
+        const resp = exceptionResponse as Record<string, unknown>;
+        if (typeof resp.errorCode === 'string') {
+          errorCode = resp.errorCode;
+        } else if (typeof resp.message === 'string' && /^[A-Z0-9_]+$/.test(resp.message)) {
+          errorCode = resp.message;
+        }
+      }
+    }
+    if (/^[A-Z0-9_]+$/.test(message)) {
+      errorCode = message;
+    }
+
+    const body: Record<string, unknown> = { success: false, message, timestamp, errorCode };
     if (errors) body.errors = errors;
 
     response.status(status).json(body);

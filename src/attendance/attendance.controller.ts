@@ -2,17 +2,23 @@ import {
   Controller,
   Post,
   Get,
+  Put,
   Body,
   Param,
   Query,
   UseGuards,
   HttpCode,
   HttpStatus,
+  Req,
 } from '@nestjs/common';
+import { Request } from 'express';
 import { AttendanceService } from './attendance.service';
 import { CheckInDto } from './dto/check-in.dto';
 import { CheckOutDto } from './dto/check-out.dto';
+import { GPSCheckInDto, GPSCheckOutDto } from './dto/gps-check-in.dto';
+import { FaceCheckInDto, FaceCheckOutDto } from './dto/face-check-in.dto';
 import { AttendanceQueryDto } from './dto/attendance-query.dto';
+import { RegularizeAttendanceDto, ReviewRegularizationDto } from './dto/regularize-attendance.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -27,18 +33,70 @@ export class AttendanceController {
 
   @Post('check-in')
   @HttpCode(HttpStatus.CREATED)
-  @Roles(Role.STAFF, Role.TEAM_LEAD, Role.ADMIN, Role.HR, Role.MANAGER)
-  async checkIn(@CurrentUser() user: RequestUser, @Body() dto: CheckInDto) {
-    const data = await this.attendanceService.checkIn(user.id, dto);
+  @Roles(Role.STAFF, Role.TEAM_LEAD, Role.ADMIN, Role.HR)
+  async checkIn(@CurrentUser() user: RequestUser, @Body() dto: CheckInDto, @Req() req: Request) {
+    const clientIp = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || req.ip || '';
+    const data = await this.attendanceService.checkIn(user.id, dto, clientIp);
     return { message: 'Check-in recorded', data };
   }
 
   @Post('check-out')
   @HttpCode(HttpStatus.OK)
-  @Roles(Role.STAFF, Role.TEAM_LEAD, Role.ADMIN, Role.HR, Role.MANAGER)
-  async checkOut(@CurrentUser() user: RequestUser, @Body() dto: CheckOutDto) {
-    const data = await this.attendanceService.checkOut(user.id, dto);
+  @Roles(Role.STAFF, Role.TEAM_LEAD, Role.ADMIN, Role.HR)
+  async checkOut(@CurrentUser() user: RequestUser, @Body() dto: CheckOutDto, @Req() req: Request) {
+    const clientIp = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || req.ip || '';
+    const data = await this.attendanceService.checkOut(user.id, dto, clientIp);
     return { message: 'Check-out recorded', data };
+  }
+
+  @Post('check-in/wifi')
+  @HttpCode(HttpStatus.CREATED)
+  @Roles(Role.STAFF, Role.TEAM_LEAD, Role.ADMIN, Role.HR)
+  async checkInWifi(@CurrentUser() user: RequestUser, @Body() dto: CheckInDto, @Req() req: Request) {
+    const clientIp = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || req.ip || '';
+    const data = await this.attendanceService.checkInWifi(user.id, dto, clientIp);
+    return { message: 'Check-in recorded via WiFi', data };
+  }
+
+  @Post('check-out/wifi')
+  @HttpCode(HttpStatus.OK)
+  @Roles(Role.STAFF, Role.TEAM_LEAD, Role.ADMIN, Role.HR)
+  async checkOutWifi(@CurrentUser() user: RequestUser, @Body() dto: CheckOutDto, @Req() req: Request) {
+    const clientIp = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || req.ip || '';
+    const data = await this.attendanceService.checkOutWifi(user.id, dto, clientIp);
+    return { message: 'Check-out recorded via WiFi', data };
+  }
+
+  @Post('check-in/location')
+  @HttpCode(HttpStatus.CREATED)
+  @Roles(Role.STAFF, Role.TEAM_LEAD, Role.ADMIN, Role.HR)
+  async checkInLocation(@CurrentUser() user: RequestUser, @Body() dto: GPSCheckInDto) {
+    const data = await this.attendanceService.checkInLocation(user.id, dto);
+    return { message: 'Check-in recorded via GPS Location', data };
+  }
+
+  @Post('check-out/location')
+  @HttpCode(HttpStatus.OK)
+  @Roles(Role.STAFF, Role.TEAM_LEAD, Role.ADMIN, Role.HR)
+  async checkOutLocation(@CurrentUser() user: RequestUser, @Body() dto: GPSCheckOutDto) {
+    const data = await this.attendanceService.checkOutLocation(user.id, dto);
+    return { message: 'Check-out recorded via GPS Location', data };
+  }
+
+  @Post('check-in/face-id')
+  @HttpCode(HttpStatus.CREATED)
+  @Roles(Role.STAFF, Role.TEAM_LEAD, Role.ADMIN, Role.HR)
+  async checkInFace(@CurrentUser() user: RequestUser, @Body() dto: FaceCheckInDto) {
+    const data = await this.attendanceService.checkInFace(user.id, dto);
+    return { message: 'Check-in recorded via Face ID', data };
+  }
+
+  @Post('check-out/face-id')
+  @HttpCode(HttpStatus.OK)
+  @Roles(Role.STAFF, Role.TEAM_LEAD, Role.ADMIN, Role.HR)
+  async checkOutFace(@CurrentUser() user: RequestUser, @Body() dto: FaceCheckOutDto) {
+    const data = await this.attendanceService.checkOutFace(user.id, dto);
+    return { message: 'Check-out recorded via Face ID', data };
   }
 
   @Get('today')
@@ -71,6 +129,28 @@ export class AttendanceController {
     return { message: 'Attendance summary fetched', data };
   }
 
+  @Get('daily-summary')
+  @Roles(Role.STAFF, Role.TEAM_LEAD, Role.ADMIN, Role.HR)
+  async getDailySummary(@CurrentUser() user: RequestUser) {
+    const data = await this.attendanceService.getDailySummary(user.id);
+    return { message: 'Daily summary fetched', data };
+  }
+
+  @Get('weekly-summary')
+  @Roles(Role.STAFF, Role.TEAM_LEAD, Role.ADMIN, Role.HR)
+  async getWeeklySummary(@CurrentUser() user: RequestUser) {
+    const data = await this.attendanceService.getWeeklySummary(user.id);
+    return { message: 'Weekly summary fetched', data };
+  }
+
+  @Get('monthly-summary')
+  @Roles(Role.STAFF, Role.TEAM_LEAD, Role.ADMIN, Role.HR)
+  async getMonthlySummary(@CurrentUser() user: RequestUser) {
+    const data = await this.attendanceService.getMonthlySummary(user.id);
+    return { message: 'Monthly summary fetched', data };
+  }
+
+
   @Get('monthly-report')
   async getMonthlyReport(
     @CurrentUser() user: RequestUser,
@@ -81,19 +161,62 @@ export class AttendanceController {
   }
 
   @Get('dashboard')
-  @Roles(Role.ADMIN, Role.HR, Role.MANAGER)
+  @Roles(Role.ADMIN, Role.HR, Role.TEAM_LEAD)
   async getDashboard(@Query() query: AttendanceQueryDto) {
     const data = await this.attendanceService.getDashboard(query);
     return { message: 'Dashboard data fetched', data };
   }
 
+  @Post('regularize')
+  @HttpCode(HttpStatus.CREATED)
+  @Roles(Role.STAFF, Role.TEAM_LEAD, Role.ADMIN, Role.HR)
+  async submitRegularization(
+    @CurrentUser() user: RequestUser,
+    @Body() dto: RegularizeAttendanceDto,
+  ) {
+    const data = await this.attendanceService.submitRegularization(user.id, dto);
+    return { message: 'Regularization request submitted successfully', data };
+  }
+
+  @Get('regularizations')
+  @Roles(Role.STAFF, Role.TEAM_LEAD, Role.ADMIN, Role.HR)
+  async listRegularizations(
+    @CurrentUser() user: RequestUser,
+    @Query('status') status?: string,
+  ) {
+    const data = await this.attendanceService.getRegularizations(
+      user.id,
+      user.role,
+      user.workspaceId || '',
+      status,
+    );
+    return { message: 'Regularization requests fetched successfully', data };
+  }
+
   @Get(':userId')
-  @Roles(Role.ADMIN, Role.HR, Role.MANAGER)
+  @Roles(Role.ADMIN, Role.HR, Role.TEAM_LEAD)
   async getUserAttendance(
     @Param('userId') userId: string,
     @Query() query: AttendanceQueryDto,
   ) {
     const data = await this.attendanceService.getAttendanceHistory(userId, query);
     return { message: 'Attendance history fetched', data };
+  }
+
+  @Put('regularize/:id/action')
+  @HttpCode(HttpStatus.OK)
+  @Roles(Role.ADMIN, Role.HR, Role.TEAM_LEAD)
+  async actionRegularization(
+    @Param('id') id: string,
+    @CurrentUser() user: RequestUser,
+    @Body() dto: ReviewRegularizationDto,
+  ) {
+    const data = await this.attendanceService.actionRegularization(
+      id,
+      user.id,
+      dto.status,
+      dto.rejectionReason,
+    );
+    return { message: `Regularization request ${dto.status.toLowerCase()} successfully`, data };
   }
 }

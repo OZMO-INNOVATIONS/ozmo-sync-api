@@ -1,4 +1,4 @@
-import { Controller, Get, UseGuards } from '@nestjs/common';
+import { Controller, Get, UseGuards, NotFoundException } from '@nestjs/common';
 import { DashboardService } from './dashboard.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -13,9 +13,12 @@ export class DashboardController {
   constructor(private readonly dashboardService: DashboardService) {}
 
   @Get('admin')
-  @Roles(Role.ADMIN, Role.SUPER_ADMIN, Role.HR, Role.MANAGER)
+  @Roles(Role.ADMIN, Role.SUPER_ADMIN, Role.HR, Role.TEAM_LEAD)
   async getAdminStats(@CurrentUser() user: RequestUser) {
-    const data = await this.dashboardService.getAdminDashboardStats(user.email);
+    if (!user.workspaceId) {
+      throw new NotFoundException('No active workspace context');
+    }
+    const data = await this.dashboardService.getAdminDashboardStats(user.workspaceId);
     return { message: 'Admin dashboard statistics retrieved successfully', data };
   }
 

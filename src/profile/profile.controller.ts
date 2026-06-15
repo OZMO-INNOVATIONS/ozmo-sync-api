@@ -26,14 +26,14 @@ export class ProfileController {
   }
 
   @Get('users')
-  @Roles(Role.ADMIN, Role.HR, Role.MANAGER)
+  @Roles(Role.ADMIN, Role.HR)
   async listUsers() {
     const data = await this.profileService.listUsers();
     return { message: 'Users fetched successfully', data };
   }
 
   @Get('users/:id')
-  @Roles(Role.ADMIN, Role.HR, Role.MANAGER)
+  @Roles(Role.ADMIN, Role.HR)
   async getUserById(@Param('id') id: string) {
     const data = await this.profileService.getUserById(id);
     return { message: 'User fetched successfully', data };

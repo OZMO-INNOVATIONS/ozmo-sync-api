@@ -77,4 +77,12 @@ export class AuthController {
   async resetPassword(@Body() dto: ResetPasswordDto) {
     return this.authService.resetPassword(dto);
   }
+
+  @Post('workspaces/switch')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  async switchWorkspace(@CurrentUser() user: RequestUser, @Body('workspaceId') workspaceId: string) {
+    const data = await this.authService.switchWorkspace(user.id, workspaceId);
+    return { message: 'Workspace context switched successfully', data };
+  }
 }

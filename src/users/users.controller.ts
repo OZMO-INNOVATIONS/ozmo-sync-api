@@ -26,7 +26,7 @@ import { RequestUser } from '../common/interfaces/request-user.interface';
 
 @Controller({ path: 'users', version: '1' })
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(Role.ADMIN, Role.HR, Role.MANAGER, Role.SUPER_ADMIN)
+@Roles(Role.ADMIN, Role.HR, Role.SUPER_ADMIN)
 export class UsersController {
   constructor(
     private readonly usersService: UsersService,

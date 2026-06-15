@@ -1,33 +1,36 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { Prisma } from '@prisma/client';
-import { formatDate, formatDateTime } from '../common/utils/date-format.util';
 
 export interface AttendanceSessionEntity {
   id: string;
   userId: string;
   workspaceId: string;
-  checkInTime: string;
-  checkOutTime: string | null;
+  checkInTime: Date;
+  checkOutTime: Date | null;
   durationMinutes: number | null;
   location: string | null;
   deviceInfo: string | null;
   status: string;
   notes: string | null;
-  createdAt: string;
+  createdAt: Date;
+  verificationType?: string | null;
 }
 
-export interface AttendanceDailySummaryEntity {
+export interface AttendanceEntity {
   id: string;
+  workspaceId: string;
   userId: string;
-  date: string;
-  firstCheckIn: string | null;
-  lastCheckOut: string | null;
-  totalWorkMinutes: number;
-  totalBreakMinutes: number;
-  totalSessions: number;
-  attendanceStatus: string;
-  createdAt: string;
+  date: Date;
+  checkIn: Date | null;
+  checkOut: Date | null;
+  breakMinutes: number;
+  workedMinutes: number;
+  overtimeMinutes: number;
+  lateMinutes: number;
+  status: string;
+  createdAt: Date;
+  verificationType?: string | null;
 }
 
 @Injectable()
@@ -43,29 +46,33 @@ export class AttendanceRepository {
       id: session.id,
       userId: session.userId,
       workspaceId: session.workspaceId,
-      checkInTime: formatDateTime(session.checkInTime) ?? session.checkInTime.toISOString(),
-      checkOutTime: session.checkOutTime ? (formatDateTime(session.checkOutTime) ?? null) : null,
+      checkInTime: session.checkInTime,
+      checkOutTime: session.checkOutTime,
       durationMinutes: session.durationMinutes,
       location: session.location,
       deviceInfo: session.deviceInfo,
       status: session.status,
       notes: session.notes,
-      createdAt: formatDateTime(session.createdAt) ?? session.createdAt.toISOString(),
+      createdAt: session.createdAt,
+      verificationType: session.verificationType,
     };
   }
 
-  private mapSummaryToEntity(summary: any): AttendanceDailySummaryEntity {
+  private mapAttendanceToEntity(record: any): AttendanceEntity {
     return {
-      id: summary.id,
-      userId: summary.userId,
-      date: formatDate(summary.date) ?? summary.date.toISOString(),
-      firstCheckIn: summary.firstCheckIn ? (formatDateTime(summary.firstCheckIn) ?? null) : null,
-      lastCheckOut: summary.lastCheckOut ? (formatDateTime(summary.lastCheckOut) ?? null) : null,
-      totalWorkMinutes: summary.totalWorkMinutes,
-      totalBreakMinutes: summary.totalBreakMinutes,
-      totalSessions: summary.totalSessions,
-      attendanceStatus: summary.attendanceStatus,
-      createdAt: formatDateTime(summary.createdAt) ?? summary.createdAt.toISOString(),
+      id: record.id,
+      workspaceId: record.workspaceId,
+      userId: record.userId,
+      date: record.date,
+      checkIn: record.checkIn,
+      checkOut: record.checkOut,
+      breakMinutes: record.breakMinutes,
+      workedMinutes: record.workedMinutes,
+      overtimeMinutes: record.overtimeMinutes,
+      lateMinutes: record.lateMinutes,
+      status: record.status,
+      createdAt: record.createdAt,
+      verificationType: record.verificationType,
     };
   }
 
@@ -74,6 +81,7 @@ export class AttendanceRepository {
       where: {
         userId,
         status: 'ACTIVE',
+        deletedAt: null,
       },
     });
     return record ? this.mapSessionToEntity(record) : null;
@@ -87,6 +95,7 @@ export class AttendanceRepository {
       notes?: string;
       location?: string;
       deviceInfo?: string;
+      verificationType?: string;
     },
     tx?: Prisma.TransactionClient,
   ): Promise<AttendanceSessionEntity> {
@@ -98,6 +107,7 @@ export class AttendanceRepository {
         notes: dto.notes,
         location: dto.location,
         deviceInfo: dto.deviceInfo,
+        verificationType: dto.verificationType,
         status: 'ACTIVE',
       },
     });
@@ -113,6 +123,7 @@ export class AttendanceRepository {
       notes?: string;
       location?: string;
       deviceInfo?: string;
+      verificationType?: string | null;
     },
     tx?: Prisma.TransactionClient,
   ): Promise<AttendanceSessionEntity | null> {
@@ -129,29 +140,15 @@ export class AttendanceRepository {
   }
 
   async findSessionById(id: string, tx?: Prisma.TransactionClient): Promise<AttendanceSessionEntity | null> {
-    const record = await this.getClient(tx).attendanceSession.findUnique({
-      where: { id },
+    const record = await this.getClient(tx).attendanceSession.findFirst({
+      where: { id, deletedAt: null },
     });
     return record ? this.mapSessionToEntity(record) : null;
   }
 
-  async findRawSessionById(
-    id: string,
-    tx?: Prisma.TransactionClient,
-  ): Promise<{ checkInTime: Date; checkOutTime: Date | null } | null> {
-    const record = await this.getClient(tx).attendanceSession.findUnique({
-      where: { id },
-    });
-    if (!record) return null;
-    return {
-      checkInTime: record.checkInTime,
-      checkOutTime: record.checkOutTime,
-    };
-  }
-
   async findSessionsByUserId(userId: string, tx?: Prisma.TransactionClient): Promise<AttendanceSessionEntity[]> {
     const records = await this.getClient(tx).attendanceSession.findMany({
-      where: { userId },
+      where: { userId, deletedAt: null },
       orderBy: { checkInTime: 'desc' },
     });
     return records.map((r) => this.mapSessionToEntity(r));
@@ -166,6 +163,7 @@ export class AttendanceRepository {
     const records = await this.getClient(tx).attendanceSession.findMany({
       where: {
         userId,
+        deletedAt: null,
         checkInTime: {
           gte: from,
           lte: to,
@@ -176,38 +174,15 @@ export class AttendanceRepository {
     return records.map((r) => this.mapSessionToEntity(r));
   }
 
-  async findSessionsByUserIdAndDate(
-    userId: string,
-    date: Date,
-    tx?: Prisma.TransactionClient,
-  ): Promise<AttendanceSessionEntity[]> {
-    const startOfDay = new Date(date);
-    startOfDay.setUTCHours(0, 0, 0, 0);
-    const endOfDay = new Date(date);
-    endOfDay.setUTCHours(23, 59, 59, 999);
-
-    const records = await this.getClient(tx).attendanceSession.findMany({
-      where: {
-        userId,
-        checkInTime: {
-          gte: startOfDay,
-          lte: endOfDay,
-        },
-      },
-      orderBy: { checkInTime: 'asc' },
-    });
-    return records.map((r) => this.mapSessionToEntity(r));
-  }
-
   async findDailySummary(
     userId: string,
     date: Date,
     tx?: Prisma.TransactionClient,
-  ): Promise<AttendanceDailySummaryEntity | null> {
+  ): Promise<AttendanceEntity | null> {
     const targetDate = new Date(date);
     targetDate.setUTCHours(0, 0, 0, 0);
 
-    const summary = await this.getClient(tx).attendanceDailySummary.findUnique({
+    const record = await this.getClient(tx).attendance.findUnique({
       where: {
         userId_date: {
           userId,
@@ -215,53 +190,40 @@ export class AttendanceRepository {
         },
       },
     });
-    return summary ? this.mapSummaryToEntity(summary) : null;
-  }
-
-  async findRawDailySummary(
-    userId: string,
-    date: Date,
-    tx?: Prisma.TransactionClient,
-  ): Promise<any | null> {
-    const targetDate = new Date(date);
-    targetDate.setUTCHours(0, 0, 0, 0);
-
-    return await this.getClient(tx).attendanceDailySummary.findUnique({
-      where: {
-        userId_date: {
-          userId,
-          date: targetDate,
-        },
-      },
-    });
+    return record ? this.mapAttendanceToEntity(record) : null;
   }
 
   async upsertDailySummary(
     dto: {
+      workspaceId: string;
       userId: string;
       date: Date;
-      firstCheckIn?: Date | null;
-      lastCheckOut?: Date | null;
-      totalWorkMinutes?: number;
-      totalBreakMinutes?: number;
-      totalSessions?: number;
-      attendanceStatus?: string;
+      checkIn?: Date | null;
+      checkOut?: Date | null;
+      breakMinutes?: number;
+      workedMinutes?: number;
+      overtimeMinutes?: number;
+      lateMinutes?: number;
+      status?: string;
+      verificationType?: string | null;
     },
     tx?: Prisma.TransactionClient,
-  ): Promise<AttendanceDailySummaryEntity> {
+  ): Promise<AttendanceEntity> {
     const targetDate = new Date(dto.date);
     targetDate.setUTCHours(0, 0, 0, 0);
 
     const data = {
-      firstCheckIn: dto.firstCheckIn,
-      lastCheckOut: dto.lastCheckOut,
-      totalWorkMinutes: dto.totalWorkMinutes ?? 0,
-      totalBreakMinutes: dto.totalBreakMinutes ?? 0,
-      totalSessions: dto.totalSessions ?? 0,
-      attendanceStatus: dto.attendanceStatus ?? 'PRESENT',
+      checkIn: dto.checkIn,
+      checkOut: dto.checkOut,
+      breakMinutes: dto.breakMinutes ?? 0,
+      workedMinutes: dto.workedMinutes ?? 0,
+      overtimeMinutes: dto.overtimeMinutes ?? 0,
+      lateMinutes: dto.lateMinutes ?? 0,
+      status: dto.status ?? 'PRESENT',
+      verificationType: dto.verificationType,
     };
 
-    const summary = await this.getClient(tx).attendanceDailySummary.upsert({
+    const record = await this.getClient(tx).attendance.upsert({
       where: {
         userId_date: {
           userId: dto.userId,
@@ -269,6 +231,7 @@ export class AttendanceRepository {
         },
       },
       create: {
+        workspaceId: dto.workspaceId,
         userId: dto.userId,
         date: targetDate,
         ...data,
@@ -276,7 +239,7 @@ export class AttendanceRepository {
       update: data,
     });
 
-    return this.mapSummaryToEntity(summary);
+    return this.mapAttendanceToEntity(record);
   }
 
   async findDailySummariesInRange(
@@ -284,10 +247,11 @@ export class AttendanceRepository {
     from: Date,
     to: Date,
     tx?: Prisma.TransactionClient,
-  ): Promise<AttendanceDailySummaryEntity[]> {
-    const summaries = await this.getClient(tx).attendanceDailySummary.findMany({
+  ): Promise<AttendanceEntity[]> {
+    const records = await this.getClient(tx).attendance.findMany({
       where: {
         userId,
+        deletedAt: null,
         date: {
           gte: from,
           lte: to,
@@ -295,16 +259,17 @@ export class AttendanceRepository {
       },
       orderBy: { date: 'desc' },
     });
-    return summaries.map((s) => this.mapSummaryToEntity(s));
+    return records.map((r) => this.mapAttendanceToEntity(r));
   }
 
   async findAllDailySummariesInRange(
     from: Date,
     to: Date,
     tx?: Prisma.TransactionClient,
-  ): Promise<AttendanceDailySummaryEntity[]> {
-    const summaries = await this.getClient(tx).attendanceDailySummary.findMany({
+  ): Promise<AttendanceEntity[]> {
+    const records = await this.getClient(tx).attendance.findMany({
       where: {
+        deletedAt: null,
         date: {
           gte: from,
           lte: to,
@@ -312,28 +277,7 @@ export class AttendanceRepository {
       },
       orderBy: { date: 'desc' },
     });
-    return summaries.map((s) => this.mapSummaryToEntity(s));
-  }
-
-  async findRawSessionsInRange(
-    from: Date,
-    to: Date,
-    tx?: Prisma.TransactionClient,
-  ): Promise<{ userId: string; checkInTime: Date; checkOutTime: Date | null; status: string }[]> {
-    const records = await this.getClient(tx).attendanceSession.findMany({
-      where: {
-        checkInTime: {
-          gte: from,
-          lte: to,
-        },
-      },
-    });
-    return records.map((r) => ({
-      userId: r.userId,
-      checkInTime: r.checkInTime,
-      checkOutTime: r.checkOutTime,
-      status: r.status,
-    }));
+    return records.map((r) => this.mapAttendanceToEntity(r));
   }
 
   async findAllSessionsInRange(
@@ -343,6 +287,7 @@ export class AttendanceRepository {
   ): Promise<AttendanceSessionEntity[]> {
     const records = await this.getClient(tx).attendanceSession.findMany({
       where: {
+        deletedAt: null,
         checkInTime: {
           gte: from,
           lte: to,
@@ -355,6 +300,7 @@ export class AttendanceRepository {
 
   async findAll(tx?: Prisma.TransactionClient): Promise<AttendanceSessionEntity[]> {
     const records = await this.getClient(tx).attendanceSession.findMany({
+      where: { deletedAt: null },
       orderBy: { checkInTime: 'desc' },
     });
     return records.map((r) => this.mapSessionToEntity(r));

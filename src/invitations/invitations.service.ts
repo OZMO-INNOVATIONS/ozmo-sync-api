@@ -11,10 +11,12 @@ import * as bcrypt from 'bcryptjs';
 import { InvitationRepository } from '../repositories/invitation.repository';
 import { UserRepository } from '../repositories/user.repository';
 import { WorkspacesRepository } from '../repositories/workspaces.repository';
+import { WorkspaceMemberRepository } from '../repositories/workspace-member.repository';
 import { InviteUserDto } from '../users/dto/invite-user.dto';
 import { AcceptInviteDto } from '../users/dto/accept-invite.dto';
 import { RequestUser } from '../common/interfaces/request-user.interface';
 import { Role, UserStatus } from '../common/constants/roles.enum';
+import { AuditService } from '../audit/audit.service';
 
 @Injectable()
 export class InvitationsService {
@@ -22,6 +24,8 @@ export class InvitationsService {
     private readonly invitationRepo: InvitationRepository,
     private readonly userRepo: UserRepository,
     private readonly workspacesRepo: WorkspacesRepository,
+    private readonly workspaceMemberRepo: WorkspaceMemberRepository,
+    private readonly auditService: AuditService,
   ) {}
 
   private normalizeRole(roleStr: string): Role {
@@ -112,11 +116,13 @@ OZMO SYNC Team`;
       throw new ConflictException('Invitation already pending');
     }
 
-    // 3. Find the admin's workspace
-    const workspaces = await this.workspacesRepo.findAll();
-    const workspace = workspaces.find((w) => w.adminEmail === admin.email);
+    // 3. Find the admin's workspace using active context
+    if (!admin.workspaceId) {
+      throw new BadRequestException('No active workspace context');
+    }
+    const workspace = await this.workspacesRepo.findById(admin.workspaceId);
     if (!workspace) {
-      throw new NotFoundException('No workspace found for the authenticated admin');
+      throw new NotFoundException('Workspace not found');
     }
 
     // Validate and normalize role
@@ -141,8 +147,18 @@ OZMO SYNC Team`;
     });
 
     // 6. Send email notification
-    const companyName = workspace.companyName || workspace.name;
+    const companyName = workspace.name;
     await this.sendInvitationEmail(dto.name, dto.email, finalRole, companyName, token);
+
+    // Log invite audit event
+    await this.auditService.log({
+      userId: admin.id,
+      workspaceId: workspace.id,
+      action: 'INVITE_SENT',
+      module: 'STAFF',
+      newData: { email: dto.email, role: finalRole },
+      detail: `Sent invitation to ${dto.email} as ${finalRole}`,
+    });
 
     return {
       invitationId: invitation.id,
@@ -205,22 +221,25 @@ OZMO SYNC Team`;
     const finalRole = this.normalizeRole(invitation.role);
 
     // 7. Create user
-    await this.userRepo.create({
-      fullName: invitation.name,
+    const newUser = await this.userRepo.create({
       firstName,
       lastName,
       email: invitation.email,
       password: hashedPassword,
-      phone: undefined,
       role: finalRole,
-      designation: undefined,
-      department: undefined,
       employeeId,
       status: UserStatus.ACTIVE,
-      refreshToken: null,
       workspaceId: workspace.id,
-      workspaceName: workspace.name,
       isFirstLogin: false,
+    });
+
+    // Create WorkspaceMember
+    await this.workspaceMemberRepo.create({
+      workspaceId: workspace.id,
+      userId: newUser.id,
+      role: finalRole,
+      status: UserStatus.ACTIVE,
+      isPrimary: true,
     });
 
     // 8. Update workspace member count
@@ -230,6 +249,16 @@ OZMO SYNC Team`;
 
     // 9. Mark invitation as accepted
     await this.invitationRepo.updateStatus(invitation.id, 'accepted', new Date());
+
+    // Log invite accepted event
+    await this.auditService.log({
+      userId: newUser.id,
+      workspaceId: workspace.id,
+      action: 'INVITE_ACCEPTED',
+      module: 'STAFF',
+      newData: { userId: newUser.id, email: newUser.email },
+      detail: `Staff accepted invitation and registered account.`,
+    });
 
     return {
       success: true,
@@ -245,10 +274,12 @@ OZMO SYNC Team`;
     }
 
     // 2. Find admin's workspace and verify matching
-    const workspaces = await this.workspacesRepo.findAll();
-    const workspace = workspaces.find((w) => w.adminEmail === admin.email);
-    if (!workspace || invitation.workspaceId !== workspace.id) {
+    if (!admin.workspaceId || invitation.workspaceId !== admin.workspaceId) {
       throw new ForbiddenException('You do not have permission to resend this invitation');
+    }
+    const workspace = await this.workspacesRepo.findById(admin.workspaceId);
+    if (!workspace) {
+      throw new NotFoundException('Workspace not found');
     }
 
     // 3. Verify status and expiration
@@ -271,7 +302,7 @@ OZMO SYNC Team`;
     await this.invitationRepo.updateTokenAndExpiration(invitation.id, tokenHash, expiresAt);
 
     // 6. Send email
-    const companyName = workspace.companyName || workspace.name;
+    const companyName = workspace.name;
     await this.sendInvitationEmail(invitation.name, invitation.email, invitation.role, companyName, token);
 
     return {
@@ -281,17 +312,20 @@ OZMO SYNC Team`;
     };
   }
 
-  async cancelInvitation(invitationId: string, admin: RequestUser) {
-    // 1. Find invitation
-    const invitation = await this.invitationRepo.findById(invitationId);
+  async cancelInvitation(invitationIdOrToken: string, admin: RequestUser) {
+    // 1. Find invitation (try ID first, fallback to token hash)
+    let invitation = await this.invitationRepo.findById(invitationIdOrToken);
+    if (!invitation) {
+      const tokenHash = crypto.createHash('sha256').update(invitationIdOrToken).digest('hex');
+      invitation = await this.invitationRepo.findByTokenHash(tokenHash);
+    }
+
     if (!invitation) {
       throw new NotFoundException('Invitation not found');
     }
 
     // 2. Find admin's workspace and verify matching
-    const workspaces = await this.workspacesRepo.findAll();
-    const workspace = workspaces.find((w) => w.adminEmail === admin.email);
-    if (!workspace || invitation.workspaceId !== workspace.id) {
+    if (!admin.workspaceId || invitation.workspaceId !== admin.workspaceId) {
       throw new ForbiddenException('You do not have permission to cancel this invitation');
     }
 
@@ -301,21 +335,19 @@ OZMO SYNC Team`;
     }
 
     // 4. Update status to cancelled
-    await this.invitationRepo.updateStatus(invitation.id, 'cancelled');
+    await this.invitationRepo.updateStatus(invitation.id, 'REVOKED');
 
     return {
-      success: true,
-      message: 'Invitation cancelled successfully',
+      id: invitation.id,
+      status: 'REVOKED',
     };
   }
 
   // Deprecated listInvitations if not needed, but keep it for list capabilities if requested.
   async listInvitations(admin: RequestUser) {
-    const workspaces = await this.workspacesRepo.findAll();
-    const workspace = workspaces.find((w) => w.adminEmail === admin.email);
-    if (!workspace) {
-      throw new NotFoundException('No workspace found for the authenticated admin');
+    if (!admin.workspaceId) {
+      throw new BadRequestException('No active workspace context');
     }
-    return await this.invitationRepo.findByWorkspaceId(workspace.id);
+    return await this.invitationRepo.findByWorkspaceId(admin.workspaceId);
   }
 }

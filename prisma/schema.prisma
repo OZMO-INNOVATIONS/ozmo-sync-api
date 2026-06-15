@@ -9,41 +9,54 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
+enum Role {
+  SUPER_ADMIN
+  ADMIN
+  HR
+  TEAM_LEAD
+  STAFF
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  INVITED
+  TERMINATED
+}
+
+enum WorkspaceStatus {
+  ACTIVE
+  SUSPENDED
+  DELETED
+}
+
+enum WorkspacePlan {
+  FREE
+  STARTER
+  PROFESSIONAL
+  ENTERPRISE
+}
+
 model User {
-  firstName       String?        @map("first_name") @db.VarChar(50)
-  lastName        String?        @map("last_name") @db.VarChar(50)
   id           String     @id @default(uuid()) @db.Uuid
-  workspaceId  String     @map("workspace_id") @db.Uuid
+  employeeId   String?    @unique @map("employee_id") @db.VarChar(50)
+  firstName    String?    @map("first_name") @db.VarChar(50)
+  lastName     String?    @map("last_name") @db.VarChar(50)
   email        String     @unique @db.VarChar(255)
+  phone        String?    @db.VarChar(30)
   password     String     @map("password_hash") @db.Text
-  role         Role       @default(STAFF)
+  profilePhoto String?    @map("profile_photo") @db.Text
+  isFirstLogin Boolean    @default(true) @map("is_first_login")
   status       UserStatus @default(ACTIVE)
-  refreshToken String?    @map("refresh_token") @db.Text
+  role         Role       @default(STAFF)
   lastLogin    DateTime?  @map("last_login")
   createdAt    DateTime   @default(now()) @map("created_at")
   updatedAt    DateTime   @default(now()) @updatedAt @map("updated_at")
+  deletedAt    DateTime?  @map("deleted_at")
+  createdBy    String?    @map("created_by") @db.Uuid
+  updatedBy    String?    @map("updated_by") @db.Uuid
+  workspaceId  String?    @map("workspace_id") @db.Uuid
 
-  staffProfile             StaffProfile?
-  attendanceSessions       AttendanceSession[]
-  attendanceDailySummaries AttendanceDailySummary[]
-  leaveRequests            LeaveRequest[]
-  taskAssignments          TaskAssignment[]
-  notifications            Notification[]
-  auditEntries             AuditEntry[]
-
-  @@index([email])
-  @@index([role])
-  @@index([status])
-  @@map("users")
-}
-
-model StaffProfile {
-  id                     String    @id @default(uuid()) @db.Uuid
-  userId                 String    @unique @map("user_id") @db.Uuid
-  workspaceId            String    @map("workspace_id") @db.Uuid
-  employeeId             String    @unique @map("employee_id") @db.VarChar(30)
-  email                  String?   @db.VarChar(255)
-  phone                  String?   @db.VarChar(30)
   alternatePhone         String?   @map("alternate_phone") @db.VarChar(30)
   designation            String?   @db.VarChar(100)
   department             String?   @db.VarChar(100)
@@ -60,62 +73,636 @@ model StaffProfile {
   postalCode             String?   @map("postal_code") @db.VarChar(20)
   emergencyContactName   String?   @map("emergency_contact_name") @db.VarChar(150)
   emergencyContactNumber String?   @map("emergency_contact_number") @db.VarChar(30)
-  profileImage           String?   @map("profile_image") @db.Text
-  isFirstLogin           Boolean   @default(true) @map("is_first_login")
+  emergencyContactRelation String? @map("emergency_contact_relation") @db.VarChar(50)
+  bloodGroup             String?   @map("blood_group") @db.VarChar(20)
+  maritalStatus          String?   @map("marital_status") @db.VarChar(50)
+  nationality            String?   @db.VarChar(100)
+  probationEndDate       DateTime? @map("probation_end_date") @db.Date
+  workLocation           String?   @map("work_location") @db.VarChar(100)
+  bio                    String?   @db.Text
   passwordChangedAt      DateTime? @map("password_changed_at")
-  createdAt              DateTime  @default(now()) @map("created_at")
-  updatedAt              DateTime  @default(now()) @updatedAt @map("updated_at")
-  deletedAt              DateTime? @map("deleted_at")
 
-  user             User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  reportingManager StaffProfile?  @relation("ReportingManager", fields: [reportingManagerId], references: [id])
-  subordinates     StaffProfile[] @relation("ReportingManager")
+  memberships        WorkspaceMember[]
+  ownedWorkspaces    Workspace[]          @relation("WorkspaceOwner")
+  attendanceRecords  Attendance[]
+  attendanceSessions AttendanceSession[]
+  leaveRequests      LeaveRequest[]       @relation("UserLeaveRequests")
+  approvedLeaves     LeaveRequest[]       @relation("ApprovedByLeaveRequests")
+  leaveApprovals     LeaveApproval[]      @relation("ApproverLeaveApprovals")
+  leaveBalances      LeaveBalance[]
+  managedProjects    Project[]            @relation("ProjectManager")
+  projectMemberships ProjectMember[]
+  assignedTasks      Task[]               @relation("TaskAssignee")
+  createdTasks       Task[]               @relation("TaskCreator")
+  taskComments       TaskComment[]
+  createdMeetings    Meeting[]            @relation("MeetingCreator")
+  meetingAttendance  MeetingParticipant[]
+  notifications      Notification[]
+  auditLogs          AuditLog[]
+  activityLogs       ActivityLog[]
+  sessions           UserSession[]
+  refreshTokens      RefreshToken[]
+  regularizations         AttendanceRegularization[] @relation("UserRegularizations")
+  approvedRegularizations AttendanceRegularization[] @relation("ApprovedByRegularizations")
+  documents               EmployeeDocument[]
+  createdChannels      ChatChannel[]            @relation("ChannelCreator")
+  channelMemberships   ChannelMember[]          @relation("ChannelMemberUser")
+  chatMessages         ChatMessage[]            @relation("MessageSender")
+  messageReads         MessageRead[]            @relation("MessageReadUser")
 
-  @@index([employeeId])
-  @@index([deletedAt])
-  @@map("staff_profiles")
+  @@index([email])
+  @@index([status])
+  @@map("users")
+}
+
+model Workspace {
+  id            String          @id @default(uuid()) @db.Uuid
+  workspaceCode String          @unique @map("workspace_code") @db.VarChar(50)
+  name          String          @db.VarChar(255)
+  slug          String          @unique @db.VarChar(255)
+  logoUrl       String?         @map("logo_url") @db.Text
+  ownerId       String          @map("owner_id") @db.Uuid
+  subscriptionId String?        @map("subscription_id") @db.Uuid
+  status        WorkspaceStatus @default(ACTIVE)
+  plan          WorkspacePlan   @default(FREE)
+  adminEmail    String?         @map("admin_email") @db.VarChar(255)
+  isActive      Boolean         @default(true) @map("is_active")
+  memberCount   Int             @default(0) @map("member_count")
+  domain        String?         @db.VarChar(255)
+  allowedWifiIp String?         @map("allowed_wifi_ip") @db.VarChar(100)
+  latitude      Float?
+  longitude     Float?
+  geofenceRadius Float?         @default(100) @map("geofence_radius")
+  suspendedAt   DateTime?       @map("suspended_at")
+  suspendedBy   String?         @map("suspended_by") @db.VarChar(255)
+  suspensionReason String?       @map("suspension_reason")
+  unsuspendedAt DateTime?       @map("unsuspended_at")
+  createdAt     DateTime        @default(now()) @map("created_at")
+  updatedAt     DateTime        @default(now()) @updatedAt @map("updated_at")
+  deletedAt     DateTime?       @map("deleted_at")
+  createdBy     String?         @map("created_by") @db.Uuid
+  updatedBy     String?         @map("updated_by") @db.Uuid
+
+  owner             User                @relation("WorkspaceOwner", fields: [ownerId], references: [id])
+  members           WorkspaceMember[]
+  settings          WorkspaceSettings?
+  departments       Department[]
+  designations      Designation[]
+  attendance        Attendance[]
+  attendanceSessions AttendanceSession[]
+  leaveTypes        LeaveType[]
+  leaveBalances     LeaveBalance[]
+  leaveRequests     LeaveRequest[]
+  leaveApprovals    LeaveApproval[]
+  projects          Project[]
+  projectMembers    ProjectMember[]
+  tasks             Task[]
+  taskComments      TaskComment[]
+  meetings          Meeting[]
+  meetingParticipants MeetingParticipant[]
+  notifications     Notification[]
+  auditLogs         AuditLog[]
+  activityLogs      ActivityLog[]
+  subscriptions     Subscription[]
+  billing           WorkspaceBilling[]
+  files             File[]
+  sessions          UserSession[]
+  holidays          Holiday[]
+  regularizations   AttendanceRegularization[]
+  chatChannels      ChatChannel[]
+
+  @@map("workspaces")
+}
+
+model WorkspaceMember {
+  id                 String     @id @default(uuid()) @db.Uuid
+  workspaceId        String     @map("workspace_id") @db.Uuid
+  userId             String     @map("user_id") @db.Uuid
+  role               Role       @default(STAFF)
+  departmentId       String?    @map("department_id") @db.Uuid
+  designationId      String?    @map("designation_id") @db.Uuid
+  reportingManagerId String?    @map("reporting_manager_id") @db.Uuid
+  joiningDate        DateTime?  @map("joining_date") @db.Date
+  isPrimary          Boolean    @default(false) @map("is_primary")
+  status             UserStatus @default(INVITED)
+  createdAt          DateTime   @default(now()) @map("created_at")
+  updatedAt          DateTime   @default(now()) @updatedAt @map("updated_at")
+  deletedAt          DateTime?  @map("deleted_at")
+  createdBy          String?    @map("created_by") @db.Uuid
+  updatedBy          String?    @map("updated_by") @db.Uuid
+
+  workspace        Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user             User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  department       Department?      @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  designation      Designation?     @relation(fields: [designationId], references: [id], onDelete: SetNull)
+  reportingManager WorkspaceMember? @relation("ReportingManager", fields: [reportingManagerId], references: [id])
+  subordinates     WorkspaceMember[] @relation("ReportingManager")
+
+  @@unique([workspaceId, userId])
+  @@map("workspace_members")
+}
+
+model WorkspaceSettings {
+  id            String    @id @default(uuid()) @db.Uuid
+  workspaceId   String    @unique @map("workspace_id") @db.Uuid
+  branding      Json?
+  modules       Json?
+  security      Json?
+  notifications Json?
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @default(now()) @updatedAt @map("updated_at")
+  deletedAt     DateTime? @map("deleted_at")
+  createdBy     String?   @map("created_by") @db.Uuid
+  updatedBy     String?   @map("updated_by") @db.Uuid
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@map("workspace_settings")
+}
+
+model Department {
+  id          String    @id @default(uuid()) @db.Uuid
+  workspaceId String    @map("workspace_id") @db.Uuid
+  name        String    @db.VarChar(100)
+  description String?   @db.Text
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at")
+  createdBy   String?   @map("created_by") @db.Uuid
+  updatedBy   String?   @map("updated_by") @db.Uuid
+
+  workspace Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  members   WorkspaceMember[]
+
+  @@map("departments")
+}
+
+model Designation {
+  id          String    @id @default(uuid()) @db.Uuid
+  workspaceId String    @map("workspace_id") @db.Uuid
+  name        String    @db.VarChar(100)
+  level       Int       @default(1)
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at")
+  createdBy   String?   @map("created_by") @db.Uuid
+  updatedBy   String?   @map("updated_by") @db.Uuid
+
+  workspace Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  members   WorkspaceMember[]
+
+  @@map("designations")
+}
+
+model Attendance {
+  id              String    @id @default(uuid()) @db.Uuid
+  workspaceId     String    @map("workspace_id") @db.Uuid
+  userId          String    @map("user_id") @db.Uuid
+  date            DateTime  @db.Date
+  checkIn         DateTime? @map("check_in")
+  checkOut        DateTime? @map("check_out")
+  breakMinutes    Int       @default(0) @map("break_minutes")
+  workedMinutes   Int       @default(0) @map("worked_minutes")
+  overtimeMinutes Int       @default(0) @map("overtime_minutes")
+  lateMinutes     Int       @default(0) @map("late_minutes")
+  status          String    @db.VarChar(50)
+  verificationType String?   @map("verification_type") @db.VarChar(50)
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @default(now()) @updatedAt @map("updated_at")
+  deletedAt       DateTime? @map("deleted_at")
+  createdBy       String?   @map("created_by") @db.Uuid
+  updatedBy       String?   @map("updated_by") @db.Uuid
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
+  @@map("attendance")
 }
 
 model AttendanceSession {
   id              String    @id @default(uuid()) @db.Uuid
-  userId          String    @map("user_id") @db.Uuid
   workspaceId     String    @map("workspace_id") @db.Uuid
-  checkInTime     DateTime  @map("check_in_time") @db.Timestamptz(6)
-  checkOutTime    DateTime? @map("check_out_time") @db.Timestamptz(6)
+  userId          String    @map("user_id") @db.Uuid
+  checkInTime     DateTime  @map("check_in_time")
+  checkOutTime    DateTime? @map("check_out_time")
   durationMinutes Int?      @map("duration_minutes")
   location        String?   @db.Text
   deviceInfo      String?   @map("device_info") @db.Text
   status          String    @default("ACTIVE") @db.VarChar(30)
+  verificationType String?  @map("verification_type") @db.VarChar(50)
   notes           String?   @db.Text
   createdAt       DateTime  @default(now()) @map("created_at")
-  updatedAt       DateTime  @updatedAt @map("updated_at")
-  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  updatedAt       DateTime  @default(now()) @updatedAt @map("updated_at")
+  deletedAt       DateTime? @map("deleted_at")
+  createdBy       String?   @map("created_by") @db.Uuid
+  updatedBy       String?   @map("updated_by") @db.Uuid
 
-  @@index([userId])
-  @@index([workspaceId])
-  @@index([userId, status])
-  @@index([userId, checkInTime])
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@map("attendance_sessions")
 }
 
-model AttendanceDailySummary {
-  id                String    @id @default(uuid()) @db.Uuid
-  userId            String    @map("user_id") @db.Uuid
-  date              DateTime  @map("date") @db.Date
-  firstCheckIn      DateTime? @map("first_check_in") @db.Timestamptz(6)
-  lastCheckOut      DateTime? @map("last_check_out") @db.Timestamptz(6)
-  totalWorkMinutes  Int       @default(0) @map("total_work_minutes")
-  totalBreakMinutes Int       @default(0) @map("total_break_minutes")
-  totalSessions     Int       @default(0) @map("total_sessions")
-  attendanceStatus  String    @default("PRESENT") @map("attendance_status") @db.VarChar(30)
-  createdAt         DateTime  @default(now()) @map("created_at")
-  updatedAt         DateTime  @updatedAt @map("updated_at")
-  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+model LeaveType {
+  id          String    @id @default(uuid()) @db.Uuid
+  workspaceId String    @map("workspace_id") @db.Uuid
+  name        String    @db.VarChar(100)
+  description String?   @db.Text
+  daysAllowed Int       @map("days_allowed")
+  isPaid      Boolean   @default(true) @map("is_paid")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at")
+  createdBy   String?   @map("created_by") @db.Uuid
+  updatedBy   String?   @map("updated_by") @db.Uuid
 
-  @@unique([userId, date])
-  @@index([userId])
-  @@index([date])
-  @@map("attendance_daily_summaries")
+  workspace Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  requests  LeaveRequest[]
+  balances  LeaveBalance[]
+
+  @@map("leave_types")
+}
+
+model LeaveBalance {
+  id          String    @id @default(uuid()) @db.Uuid
+  workspaceId String    @map("workspace_id") @db.Uuid
+  userId      String    @map("user_id") @db.Uuid
+  leaveTypeId String    @map("leave_type_id") @db.Uuid
+  balance     Float     @default(0)
+  used        Float     @default(0)
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at")
+  createdBy   String?   @map("created_by") @db.Uuid
+  updatedBy   String?   @map("updated_by") @db.Uuid
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  leaveType LeaveType @relation(fields: [leaveTypeId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, leaveTypeId])
+  @@map("leave_balances")
+}
+
+model LeaveRequest {
+  id          String    @id @default(uuid()) @db.Uuid
+  workspaceId String    @map("workspace_id") @db.Uuid
+  userId      String    @map("user_id") @db.Uuid
+  leaveTypeId String    @map("leave_type_id") @db.Uuid
+  fromDate    DateTime  @map("from_date") @db.Date
+  toDate      DateTime  @map("to_date") @db.Date
+  days        Float
+  reason      String    @db.Text
+  status      String    @default("PENDING") @db.VarChar(50)
+  approvedBy  String?   @map("approved_by") @db.Uuid
+  approvedAt  DateTime? @map("approved_at")
+  rejectionReason String? @map("rejection_reason") @db.Text
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at")
+  createdBy   String?   @map("created_by") @db.Uuid
+  updatedBy   String?   @map("updated_by") @db.Uuid
+
+  workspace Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User            @relation("UserLeaveRequests", fields: [userId], references: [id], onDelete: Cascade)
+  leaveType LeaveType       @relation(fields: [leaveTypeId], references: [id], onDelete: Cascade)
+  approver  User?           @relation("ApprovedByLeaveRequests", fields: [approvedBy], references: [id], onDelete: SetNull)
+  approvals LeaveApproval[]
+
+  @@map("leave_requests")
+}
+
+model LeaveApproval {
+  id             String    @id @default(uuid()) @db.Uuid
+  workspaceId    String    @map("workspace_id") @db.Uuid
+  leaveRequestId String    @map("leave_request_id") @db.Uuid
+  approvedBy     String    @map("approved_by") @db.Uuid
+  approvalLevel  String    @map("approval_level") @db.VarChar(50)
+  decision       String    @db.VarChar(50)
+  remarks        String?   @db.Text
+  approvedAt     DateTime  @map("approved_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @default(now()) @updatedAt @map("updated_at")
+  deletedAt      DateTime? @map("deleted_at")
+  createdBy      String?   @map("created_by") @db.Uuid
+  updatedBy      String?   @map("updated_by") @db.Uuid
+
+  workspace    Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  leaveRequest LeaveRequest @relation(fields: [leaveRequestId], references: [id], onDelete: Cascade)
+  approver     User         @relation("ApproverLeaveApprovals", fields: [approvedBy], references: [id], onDelete: Cascade)
+
+  @@map("leave_approvals")
+}
+
+model Project {
+  id               String    @id @default(uuid()) @db.Uuid
+  workspaceId      String    @map("workspace_id") @db.Uuid
+  name             String    @db.VarChar(255)
+  description      String?   @db.Text
+  startDate        DateTime? @map("start_date") @db.Date
+  endDate          DateTime? @map("end_date") @db.Date
+  status           String    @default("ACTIVE") @db.VarChar(50)
+  projectManagerId String?   @map("project_manager_id") @db.Uuid
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+  deletedAt        DateTime? @map("deleted_at")
+  createdBy        String?   @map("created_by") @db.Uuid
+  updatedBy        String?   @map("updated_by") @db.Uuid
+
+  workspace      Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  projectManager User?           @relation("ProjectManager", fields: [projectManagerId], references: [id], onDelete: SetNull)
+  members        ProjectMember[]
+  tasks          Task[]
+
+  @@map("projects")
+}
+
+model ProjectMember {
+  id          String    @id @default(uuid()) @db.Uuid
+  workspaceId String    @map("workspace_id") @db.Uuid
+  projectId   String    @map("project_id") @db.Uuid
+  userId      String    @map("user_id") @db.Uuid
+  role        String    @default("MEMBER") @db.VarChar(50)
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at")
+  createdBy   String?   @map("created_by") @db.Uuid
+  updatedBy   String?   @map("updated_by") @db.Uuid
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, userId])
+  @@map("project_members")
+}
+
+model Task {
+  id          String    @id @default(uuid()) @db.Uuid
+  workspaceId String    @map("workspace_id") @db.Uuid
+  projectId   String    @map("project_id") @db.Uuid
+  assignedTo  String?   @map("assigned_to") @db.Uuid
+  assignedBy  String?   @map("assigned_by") @db.Uuid
+  title       String    @db.VarChar(255)
+  description String?   @db.Text
+  priority    String    @default("MEDIUM") @db.VarChar(30)
+  status      String    @default("TODO") @db.VarChar(30)
+  dueDate     DateTime? @map("due_date")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at")
+  createdBy   String?   @map("created_by") @db.Uuid
+  updatedBy   String?   @map("updated_by") @db.Uuid
+
+  workspace Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project   Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  assignee  User?         @relation("TaskAssignee", fields: [assignedTo], references: [id], onDelete: SetNull)
+  creator   User?         @relation("TaskCreator", fields: [assignedBy], references: [id], onDelete: SetNull)
+  comments  TaskComment[]
+
+  @@map("tasks")
+}
+
+model TaskComment {
+  id          String    @id @default(uuid()) @db.Uuid
+  workspaceId String    @map("workspace_id") @db.Uuid
+  taskId      String    @map("task_id") @db.Uuid
+  userId      String    @map("user_id") @db.Uuid
+  comment     String    @db.Text
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at")
+  createdBy   String?   @map("created_by") @db.Uuid
+  updatedBy   String?   @map("updated_by") @db.Uuid
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  task      Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("task_comments")
+}
+
+model Meeting {
+  id          String    @id @default(uuid()) @db.Uuid
+  workspaceId String    @map("workspace_id") @db.Uuid
+  createdBy   String    @map("created_by") @db.Uuid
+  title       String    @db.VarChar(255)
+  description String?   @db.Text
+  meetingLink String    @map("meeting_link") @db.Text
+  meetingDate DateTime  @map("meeting_date")
+  duration    String    @db.VarChar(50)
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at")
+  updatedBy   String?   @map("updated_by") @db.Uuid
+
+  workspace    Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  creator      User                 @relation("MeetingCreator", fields: [createdBy], references: [id], onDelete: Cascade)
+  participants MeetingParticipant[]
+
+  @@map("meetings")
+}
+
+model MeetingParticipant {
+  id          String    @id @default(uuid()) @db.Uuid
+  workspaceId String    @map("workspace_id") @db.Uuid
+  meetingId   String    @map("meeting_id") @db.Uuid
+  userId      String    @map("user_id") @db.Uuid
+  attended    Boolean   @default(false)
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at")
+  createdBy   String?   @map("created_by") @db.Uuid
+  updatedBy   String?   @map("updated_by") @db.Uuid
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  meeting   Meeting   @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([meetingId, userId])
+  @@map("meeting_participants")
+}
+
+model Notification {
+  id          String    @id @default(uuid()) @db.Uuid
+  workspaceId String    @map("workspace_id") @db.Uuid
+  userId      String    @map("user_id") @db.Uuid
+  title       String    @db.VarChar(255)
+  message     String    @db.Text
+  type        String    @db.VarChar(50)
+  isRead      Boolean   @default(false) @map("is_read")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at")
+  createdBy   String?   @map("created_by") @db.Uuid
+  updatedBy   String?   @map("updated_by") @db.Uuid
+  actionId    String?   @map("action_id") @db.VarChar(100)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
+
+model AuditLog {
+  id          String    @id @default(uuid()) @db.Uuid
+  workspaceId String?   @map("workspace_id") @db.Uuid
+  userId      String?   @map("user_id") @db.Uuid
+  module      String    @db.VarChar(100)
+  action      String    @db.VarChar(100)
+  oldData     Json?     @map("old_data")
+  newData     Json?     @map("new_data")
+  ipAddress   String?   @map("ip_address") @db.VarChar(45)
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at")
+  createdBy   String?   @map("created_by") @db.Uuid
+  updatedBy   String?   @map("updated_by") @db.Uuid
+
+  workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+  user      User?      @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@map("audit_logs")
+}
+
+model ActivityLog {
+  id          String    @id @default(uuid()) @db.Uuid
+  workspaceId String    @map("workspace_id") @db.Uuid
+  userId      String    @map("user_id") @db.Uuid
+  activity    String    @db.Text
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at")
+  createdBy   String?   @map("created_by") @db.Uuid
+  updatedBy   String?   @map("updated_by") @db.Uuid
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("activity_logs")
+}
+
+model Subscription {
+  id          String    @id @default(uuid()) @db.Uuid
+  workspaceId String    @map("workspace_id") @db.Uuid
+  plan        String    @db.VarChar(50)
+  status      String    @db.VarChar(50)
+  startDate   DateTime  @map("start_date")
+  endDate     DateTime  @map("end_date")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at")
+  createdBy   String?   @map("created_by") @db.Uuid
+  updatedBy   String?   @map("updated_by") @db.Uuid
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@map("subscriptions")
+}
+
+model WorkspaceBilling {
+  id          String    @id @default(uuid()) @db.Uuid
+  workspaceId String    @map("workspace_id") @db.Uuid
+  amount      Float
+  status      String    @db.VarChar(50)
+  invoiceUrl  String?   @map("invoice_url") @db.Text
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at")
+  createdBy   String?   @map("created_by") @db.Uuid
+  updatedBy   String?   @map("updated_by") @db.Uuid
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@map("workspace_billing")
+}
+
+model File {
+  id          String    @id @default(uuid()) @db.Uuid
+  workspaceId String    @map("workspace_id") @db.Uuid
+  name        String    @db.VarChar(255)
+  url         String    @db.Text
+  mimeType    String    @map("mime_type") @db.VarChar(100)
+  size        Int
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at")
+  createdBy   String?   @map("created_by") @db.Uuid
+  updatedBy   String?   @map("updated_by") @db.Uuid
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@map("files")
+}
+
+model UserSession {
+  id          String    @id @default(uuid()) @db.Uuid
+  userId      String    @map("user_id") @db.Uuid
+  workspaceId String?   @map("workspace_id") @db.Uuid
+  deviceToken String?   @map("device_token") @db.Text
+  ipAddress   String?   @map("ip_address") @db.VarChar(45)
+  userAgent   String?   @map("user_agent") @db.Text
+  isActive    Boolean   @default(true) @map("is_active")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at")
+  createdBy   String?   @map("created_by") @db.Uuid
+  updatedBy   String?   @map("updated_by") @db.Uuid
+
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+
+  @@map("user_sessions")
+}
+
+model RefreshToken {
+  id          String    @id @default(uuid()) @db.Uuid
+  userId      String    @map("user_id") @db.Uuid
+  token       String    @unique @db.Text
+  expiresAt   DateTime  @map("expires_at")
+  isRevoked   Boolean   @default(false) @map("is_revoked")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at")
+  deletedAt   DateTime? @map("deleted_at")
+  createdBy   String?   @map("created_by") @db.Uuid
+  updatedBy   String?   @map("updated_by") @db.Uuid
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("refresh_tokens")
+}
+
+model SystemSettings {
+  id            String   @id @default(uuid()) @db.Uuid
+  branding      Json
+  modules       Json
+  security      Json
+  notifications Json
+  updatedAt     DateTime @updatedAt @map("updated_at")
+  updatedBy     String?  @map("updated_by") @db.VarChar(255)
+
+  @@map("system_settings")
+}
+
+model Invitation {
+  id          String    @id @default(uuid()) @db.Uuid
+  workspaceId String    @map("workspace_id") @db.Uuid
+  invitedBy   String    @map("invited_by") @db.Uuid
+  name        String    @db.VarChar(255)
+  email       String    @db.VarChar(255)
+  role        String    @db.VarChar(50)
+  tokenHash   String    @unique @map("token_hash") @db.Text
+  status      String    @default("pending") @db.VarChar(20)
+  expiresAt   DateTime  @map("expires_at")
+  acceptedAt  DateTime? @map("accepted_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  @@index([email])
+  @@index([tokenHash])
+  @@index([workspaceId])
+  @@map("invitations")
 }
 
 model Job {
@@ -173,227 +760,6 @@ model Candidate {
   @@map("candidates")
 }
 
-model AuditEntry {
-  id          String      @id @default(uuid()) @db.Uuid
-  action      AuditAction
-  entityType  String      @map("entity_type") @db.VarChar(50)
-  entityId    String?     @map("entity_id") @db.Uuid
-  actorId     String?     @map("actor_id") @db.Uuid
-  actorName   String?     @map("actor_name") @db.VarChar(100)
-  ipAddress   String?     @map("ip_address") @db.VarChar(45)
-  workspaceId String?     @map("workspace_id") @db.Uuid
-  detail      String?
-  createdAt   DateTime    @default(now()) @map("created_at")
-
-  actor User? @relation(fields: [actorId], references: [id], onDelete: SetNull)
-
-  @@index([action])
-  @@index([entityType])
-  @@index([entityId])
-  @@index([actorId])
-  @@index([workspaceId])
-  @@map("audit_entries")
-}
-
-model Workspace {
-  id               String        @id @default(uuid()) @db.Uuid
-  name             String        @db.VarChar(255)
-  domain           String?       @db.VarChar(255)
-  plan             WorkspacePlan @default(FREE)
-  isActive         Boolean       @default(true) @map("is_active")
-  memberCount      Int           @default(0) @map("member_count")
-  adminEmail       String?       @map("admin_email") @db.VarChar(255)
-  logoUrl          String?       @map("logo_url")
-  suspendedAt      DateTime?     @map("suspended_at")
-  suspendedBy      String?       @map("suspended_by") @db.VarChar(255)
-  suspensionReason String?       @map("suspension_reason")
-  unsuspendedAt    DateTime?     @map("unsuspended_at")
-  createdAt        DateTime      @default(now()) @map("created_at")
-  updatedAt        DateTime      @updatedAt @map("updated_at")
-
-  companyName        String? @map("company_name") @db.VarChar(255)
-  businessType       String? @map("business_type") @db.VarChar(100)
-  industryType       String? @map("industry_type") @db.VarChar(100)
-  companySize        String? @map("company_size") @db.VarChar(50)
-  country            String? @db.VarChar(100)
-  website            String? @db.VarChar(255)
-  companyEmail       String? @map("company_email") @db.VarChar(255)
-  companyPhone       String? @map("company_phone") @db.VarChar(50)
-  companyAddress     String? @map("company_address")
-  companyDescription String? @map("company_description")
-
-  attendanceMethod    String?  @map("attendance_method") @db.VarChar(100)
-  defaultWorkingHours String?  @map("default_working_hours") @db.VarChar(100)
-  weekendDays         String[] @map("weekend_days")
-  leavePolicy         String?  @map("leave_policy")
-
-  pushNotifications Boolean @default(true) @map("push_notifications")
-  attendanceAlerts  Boolean @default(true) @map("attendance_alerts")
-  leaveAlerts       Boolean @default(true) @map("leave_alerts")
-  taskAlerts        Boolean @default(true) @map("task_alerts")
-  birthdayAlerts    Boolean @default(true) @map("birthday_alerts")
-
-  @@map("workspaces")
-}
-
-model SystemSettings {
-  id            String   @id @default(uuid()) @db.Uuid
-  branding      Json
-  modules       Json
-  security      Json
-  notifications Json
-  updatedAt     DateTime @updatedAt @map("updated_at")
-  updatedBy     String?  @map("updated_by") @db.VarChar(255)
-
-  @@map("system_settings")
-}
-
-model Invitation {
-  id          String    @id @default(uuid()) @db.Uuid
-  workspaceId String    @map("workspace_id") @db.Uuid
-  invitedBy   String    @map("invited_by") @db.Uuid
-  name        String    @db.VarChar(255)
-  email       String    @db.VarChar(255)
-  role        String    @db.VarChar(50)
-  tokenHash   String    @unique @map("token_hash") @db.Text
-  status      String    @default("pending") @db.VarChar(20)
-  expiresAt   DateTime  @map("expires_at")
-  acceptedAt  DateTime? @map("accepted_at")
-  createdAt   DateTime  @default(now()) @map("created_at")
-  updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at")
-
-  @@index([email])
-  @@index([tokenHash])
-  @@index([workspaceId])
-  @@map("invitations")
-}
-
-model LeaveType {
-  id          String         @id @default(uuid()) @db.Uuid
-  workspaceId String         @map("workspace_id") @db.Uuid
-  name        String         @db.VarChar(100)
-  description String?        @db.Text
-  daysAllowed Int            @map("days_allowed")
-  isPaid      Boolean        @default(true) @map("is_paid")
-  createdAt   DateTime       @default(now()) @map("created_at")
-  updatedAt   DateTime       @updatedAt @map("updated_at")
-  requests    LeaveRequest[]
-
-  @@map("leave_types")
-}
-
-model LeaveRequest {
-  id          String      @id @default(uuid()) @db.Uuid
-  workspaceId String      @map("workspace_id") @db.Uuid
-  userId      String      @map("user_id") @db.Uuid
-  leaveTypeId String      @map("leave_type_id") @db.Uuid
-  startDate   DateTime    @map("start_date") @db.Date
-  endDate     DateTime    @map("end_date") @db.Date
-  reason      String      @db.Text
-  status      LeaveStatus @default(PENDING)
-  createdAt   DateTime    @default(now()) @map("created_at")
-  updatedAt   DateTime    @updatedAt @map("updated_at")
-
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  leaveType LeaveType @relation(fields: [leaveTypeId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-  @@index([workspaceId])
-  @@map("leave_requests")
-}
-
-model Project {
-  id          String          @id @default(uuid()) @db.Uuid
-  workspaceId String          @map("workspace_id") @db.Uuid
-  name        String          @db.VarChar(255)
-  description String?         @db.Text
-  status      ProjectStatus   @default(ACTIVE)
-  startDate   DateTime?       @map("start_date") @db.Date
-  endDate     DateTime?       @map("end_date") @db.Date
-  createdAt   DateTime        @default(now()) @map("created_at")
-  updatedAt   DateTime        @updatedAt @map("updated_at")
-  tasks       Task[]
-  members     ProjectMember[]
-
-  @@map("projects")
-}
-
-model ProjectMember {
-  id        String   @id @default(uuid()) @db.Uuid
-  projectId String   @map("project_id") @db.Uuid
-  userId    String   @map("user_id") @db.Uuid
-  role      String   @default("MEMBER") @db.VarChar(50)
-  createdAt DateTime @default(now()) @map("created_at")
-
-  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-
-  @@unique([projectId, userId])
-  @@map("project_members")
-}
-
-model Task {
-  id          String       @id @default(uuid()) @db.Uuid
-  workspaceId String       @map("workspace_id") @db.Uuid
-  projectId   String       @map("project_id") @db.Uuid
-  title       String       @db.VarChar(255)
-  description String?      @db.Text
-  status      TaskStatus   @default(TODO)
-  priority    TaskPriority @default(MEDIUM)
-  dueDate     DateTime?    @map("due_date") @db.Timestamptz(6)
-  createdAt   DateTime     @default(now()) @map("created_at")
-  updatedAt   DateTime     @updatedAt @map("updated_at")
-
-  project     Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  assignments TaskAssignment[]
-
-  @@map("tasks")
-}
-
-model TaskAssignment {
-  id        String   @id @default(uuid()) @db.Uuid
-  taskId    String   @map("task_id") @db.Uuid
-  userId    String   @map("user_id") @db.Uuid
-  createdAt DateTime @default(now()) @map("created_at")
-
-  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([taskId, userId])
-  @@map("task_assignments")
-}
-
-model Notification {
-  id          String   @id @default(uuid()) @db.Uuid
-  workspaceId String   @map("workspace_id") @db.Uuid
-  userId      String   @map("user_id") @db.Uuid
-  title       String   @db.VarChar(255)
-  message     String   @db.Text
-  isRead      Boolean  @default(false) @map("is_read")
-  createdAt   DateTime @default(now()) @map("created_at")
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-  @@map("notifications")
-}
-
-enum Role {
-  SUPER_ADMIN
-  ADMIN
-  HR
-  MANAGER
-  TEAM_LEAD
-  STAFF
-  GUEST
-}
-
-enum UserStatus {
-  ACTIVE
-  INACTIVE
-  RESIGNED
-  TERMINATED
-}
-
 enum JobStatus {
   OPEN
   PAUSED
@@ -430,56 +796,177 @@ enum CandidateSource {
   MANUAL
 }
 
-enum AuditAction {
-  USER_CREATED
-  USER_UPDATED
-  USER_DELETED
-  WORKSPACE_CREATED
-  WORKSPACE_UPDATED
-  WORKSPACE_SUSPENDED
-  WORKSPACE_UNSUSPENDED
-  SETTINGS_UPDATED
-  JOB_POSTED
-  JOB_CLOSED
-  CANDIDATE_APPLIED
-  DATA_EXPORTED
-  LOGIN
-  LOGOUT
-  PASSWORD_CHANGED
+model Holiday {
+  id           String    @id @default(uuid()) @db.Uuid
+  workspaceId  String?   @map("workspace_id") @db.Uuid
+  name         String    @db.VarChar(255)
+  date         DateTime  @db.Date
+  type         String    @default("publicHoliday") @db.VarChar(50)
+  description  String?   @db.Text
+  notes        String?   @db.Text
+  repeatYearly Boolean   @default(true) @map("repeat_yearly")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  workspace    Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@map("holidays")
 }
 
-enum WorkspacePlan {
-  FREE
-  STARTER
-  PROFESSIONAL
-  ENTERPRISE
+enum RegularizationType {
+  CHECK_IN
+  CHECK_OUT
+  BOTH
 }
 
-enum LeaveStatus {
+enum RegularizationStatus {
   PENDING
   APPROVED
   REJECTED
-  CANCELLED
 }
 
-enum ProjectStatus {
-  PLANNING
-  ACTIVE
-  ON_HOLD
-  COMPLETED
-  CANCELLED
+model AttendanceRegularization {
+  id              String               @id @default(uuid()) @db.Uuid
+  workspaceId     String               @map("workspace_id") @db.Uuid
+  userId          String               @map("user_id") @db.Uuid
+  date            DateTime             @db.Date
+  type            RegularizationType
+  checkIn         DateTime?            @map("check_in")
+  checkOut        DateTime?            @map("check_out")
+  reason          String               @db.Text
+  status          RegularizationStatus @default(PENDING)
+  rejectionReason String?              @map("rejection_reason") @db.Text
+  approvedById    String?              @map("approved_by_id") @db.Uuid
+  approvedAt      DateTime?            @map("approved_at")
+  createdAt       DateTime             @default(now()) @map("created_at")
+  updatedAt       DateTime             @default(now()) @updatedAt @map("updated_at")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation("UserRegularizations", fields: [userId], references: [id], onDelete: Cascade)
+  approvedBy User?    @relation("ApprovedByRegularizations", fields: [approvedById], references: [id])
+
+  @@map("attendance_regularizations")
 }
 
-enum TaskStatus {
-  TODO
-  IN_PROGRESS
-  REVIEW
-  DONE
+enum DocumentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  UPDATE_REQUESTED
+  REUPLOAD_REQUESTED
 }
 
-enum TaskPriority {
-  LOW
-  MEDIUM
-  HIGH
-  URGENT
+model EmployeeDocument {
+  id              String         @id @default(uuid()) @db.Uuid
+  employeeId      String         @map("employee_id") @db.Uuid
+  documentType    String         @map("document_type") @db.VarChar(100)
+  name            String         @db.VarChar(255)
+  fileUrl         String         @map("file_url") @db.Text
+  status          DocumentStatus @default(PENDING)
+  rejectionReason String?        @map("rejection_reason") @db.Text
+  uploadDate      DateTime       @default(now()) @map("upload_date")
+  expiryDate      DateTime?      @map("expiry_date")
+  approvalDate    DateTime?      @map("approval_date")
+  updatedDate     DateTime?      @map("updated_date")
+  isCurrent       Boolean        @default(true) @map("is_current")
+  version         Int            @default(1)
+  parentId        String?        @map("parent_id") @db.Uuid
+
+  employee        User           @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  updateRequests  DocumentUpdateRequest[]
+
+  @@map("employee_documents")
+}
+
+enum RequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model DocumentUpdateRequest {
+  id           String        @id @default(uuid()) @db.Uuid
+  documentId   String        @map("document_id") @db.Uuid
+  employeeId   String        @map("employee_id") @db.Uuid
+  reason       String        @db.Text
+  newFileUrl   String        @map("new_file_url") @db.Text
+  newFileName  String        @map("new_file_name") @db.VarChar(255)
+  status       RequestStatus @default(PENDING)
+  createdAt    DateTime      @default(now()) @map("created_at")
+  resolvedAt   DateTime?     @map("resolved_at")
+  resolvedBy   String?       @map("resolved_by") @db.Uuid
+
+  document     EmployeeDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@map("document_update_requests")
+}
+
+enum ChannelType {
+  PUBLIC
+  PRIVATE
+}
+
+model ChatChannel {
+  id          String         @id @default(uuid()) @db.Uuid
+  workspaceId String         @map("workspace_id") @db.Uuid
+  channelName String         @map("channel_name") @db.VarChar(100)
+  description String?        @db.Text
+  channelType ChannelType    @default(PUBLIC) @map("channel_type")
+  createdBy   String         @map("created_by") @db.Uuid
+  createdAt   DateTime       @default(now()) @map("created_at")
+  updatedAt   DateTime       @default(now()) @updatedAt @map("updated_at")
+
+  workspace   Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  creator     User           @relation("ChannelCreator", fields: [createdBy], references: [id], onDelete: Cascade)
+  members     ChannelMember[]
+  messages    ChatMessage[]
+
+  @@unique([workspaceId, channelName])
+  @@map("chat_channels")
+}
+
+model ChannelMember {
+  id        String      @id @default(uuid()) @db.Uuid
+  channelId String      @map("channel_id") @db.Uuid
+  userId    String      @map("user_id") @db.Uuid
+  role      String      @default("member") @db.VarChar(50)
+  joinedAt  DateTime    @default(now()) @map("joined_at")
+
+  channel   ChatChannel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  user      User        @relation("ChannelMemberUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([channelId, userId])
+  @@map("channel_members")
+}
+
+model ChatMessage {
+  id          String        @id @default(uuid()) @db.Uuid
+  channelId   String        @map("channel_id") @db.Uuid
+  senderId    String        @map("sender_id") @db.Uuid
+  message     String        @db.Text
+  messageType String        @default("text") @map("message_type") @db.VarChar(50)
+  fileUrl     String?       @map("file_url") @db.Text
+  fileName    String?       @map("file_name") @db.VarChar(255)
+  isEdited    Boolean       @default(false) @map("is_edited")
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @default(now()) @updatedAt @map("updated_at")
+
+  channel     ChatChannel   @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  sender      User          @relation("MessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+  reads       MessageRead[]
+
+  @@map("chat_messages")
+}
+
+model MessageRead {
+  id        String      @id @default(uuid()) @db.Uuid
+  messageId String      @map("message_id") @db.Uuid
+  userId    String      @map("user_id") @db.Uuid
+  readAt    DateTime    @default(now()) @map("read_at")
+
+  message   ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user      User        @relation("MessageReadUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId])
+  @@map("message_reads")
 }

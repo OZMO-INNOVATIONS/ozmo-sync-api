@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, NestModule, MiddlewareConsumer } from '@nestjs/common';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
 import { PrismaModule } from './prisma/prisma.module';
@@ -16,10 +16,18 @@ import { HealthModule } from './modules/health/health.module';
 import { CommonModule } from './modules/common/common.module';
 import { InvitationsModule } from './invitations/invitations.module';
 import { DashboardModule } from './dashboard/dashboard.module';
+import { MeetingsModule } from './meetings/meetings.module';
+import { LeavesModule } from './leaves/leaves.module';
+import { NotificationsModule } from './notifications/notifications.module';
+import { HolidaysModule } from './holidays/holidays.module';
+import { DocumentsModule } from './documents/documents.module';
+import { ChatModule } from './chat/chat.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { ResponseTransformInterceptor } from './common/interceptors/response-transform.interceptor';
+import { RequestLockInterceptor } from './common/interceptors/request-lock.interceptor';
+import { WorkspaceIsolationMiddleware } from './common/middleware/workspace-isolation.middleware';
 
 @Module({
   imports: [
@@ -37,14 +45,27 @@ import { ResponseTransformInterceptor } from './common/interceptors/response-tra
     ReportsModule,
     HealthModule,
     DashboardModule,
-    CommonModule,
     InvitationsModule,
+    MeetingsModule,
+    LeavesModule,
+    NotificationsModule,
+    HolidaysModule,
+    DocumentsModule,
+    ChatModule,
+    CommonModule, // Must be LAST — contains wildcard FallbackController (@All('*'))
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
     { provide: APP_FILTER, useClass: HttpExceptionFilter },
     { provide: APP_INTERCEPTOR, useClass: ResponseTransformInterceptor },
+    { provide: APP_INTERCEPTOR, useClass: RequestLockInterceptor },
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer
+      .apply(WorkspaceIsolationMiddleware)
+      .forRoutes('*');
+  }
+}

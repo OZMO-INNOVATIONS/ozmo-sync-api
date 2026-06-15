@@ -53,6 +53,7 @@ export class WorkspacesController {
   }
 
   @Put(':id')
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN)
   async updateWorkspace(
     @Param('id') id: string,
     @Body() dto: UpdateWorkspaceDto,

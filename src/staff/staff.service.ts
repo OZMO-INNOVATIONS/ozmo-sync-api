@@ -3,23 +3,30 @@ import {
   ConflictException,
   NotFoundException,
   ForbiddenException,
+  BadRequestException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcryptjs';
 import { UserRepository } from '../repositories/user.repository';
 import { WorkspacesRepository } from '../repositories/workspaces.repository';
+import { WorkspaceMemberRepository } from '../repositories/workspace-member.repository';
 import { CreateStaffDto } from './dto/create-staff.dto';
 import { UpdateStaffDto } from './dto/update-staff.dto';
 import { StaffFilterDto } from './dto/staff-filter.dto';
 import { UserStatus, Role } from '../common/constants/roles.enum';
 import { RequestUser } from '../common/interfaces/request-user.interface';
+import { AuditService } from '../audit/audit.service';
+import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class StaffService {
   constructor(
     private readonly userRepo: UserRepository,
     private readonly workspacesRepo: WorkspacesRepository,
+    private readonly workspaceMemberRepo: WorkspaceMemberRepository,
     private readonly configService: ConfigService,
+    private readonly auditService: AuditService,
+    private readonly prisma: PrismaService,
   ) {}
 
   async create(dto: CreateStaffDto, actor: RequestUser) {
@@ -42,7 +49,12 @@ export class StaffService {
     const creator = await this.userRepo.findById(actor.id);
     if (!creator) throw new NotFoundException('Creator admin not found');
     const workspaceId = creator.workspaceId;
-    const workspaceName = creator.workspaceName;
+    if (!workspaceId) {
+      throw new BadRequestException('Creator does not belong to any workspace');
+    }
+
+    const ws = await this.workspacesRepo.findById(workspaceId);
+    const workspaceName = ws?.name || '';
 
     const employeeId = await this._generateEmployeeId();
 
@@ -51,23 +63,39 @@ export class StaffService {
     const passwordHash = await bcrypt.hash(tempPassword, saltRounds);
 
     const user = await this.userRepo.create({
-      fullName: dto.fullName,
       firstName,
       lastName,
       email: dto.email,
       password: passwordHash,
       phone: dto.phone,
-      role: dto.role,
+      role: dto.role as any,
       designation: dto.designation,
       department: dto.department,
-      joiningDate: dto.joiningDate,
+      joiningDate: dto.joiningDate ? new Date(dto.joiningDate) : undefined,
       employeeId,
       status: UserStatus.ACTIVE,
-      refreshToken: null,
       workspaceId,
-      workspaceName,
       isFirstLogin: true,
       createdBy: actor.id,
+      profilePhoto: dto.profilePhoto,
+    });
+
+    await this.workspaceMemberRepo.create({
+      workspaceId,
+      userId: user.id,
+      role: dto.role as Role,
+      status: UserStatus.ACTIVE,
+      isPrimary: true,
+      createdBy: actor.id,
+    });
+
+    await this.auditService.log({
+      userId: actor.id,
+      workspaceId,
+      action: 'STAFF_CREATION',
+      module: 'STAFF',
+      newData: { email: user.email, role: user.role, employeeId: user.employeeId },
+      detail: `Created staff member ${user.email} with role ${user.role}`,
     });
 
     return {
@@ -78,14 +106,16 @@ export class StaffService {
     };
   }
 
-  async findAll(query?: StaffFilterDto) {
+  async findAll(query?: StaffFilterDto, workspaceId?: string) {
+    let users: any[];
     if (query) {
-      const users = await this.userRepo.findFilteredPaged(
+      users = await this.userRepo.findFilteredPaged(
         {
           department: query.department,
           status: query.status,
           role: query.role,
           search: query.search,
+          workspaceId,
         },
         {
           page: query.page,
@@ -93,10 +123,32 @@ export class StaffService {
           sort: query.sort,
         }
       );
-      return users.map((u) => this._sanitize(u));
+    } else {
+      if (workspaceId) {
+        users = await this.userRepo.findFilteredPaged({ workspaceId }, { limit: 1000 });
+      } else {
+        users = await this.userRepo.findAll();
+      }
     }
-    const users = await this.userRepo.findAll();
-    return users.map((u) => this._sanitize(u));
+
+    const today = new Date();
+    const todayDateOnly = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+
+    const attendanceRecords = await this.prisma.attendance.findMany({
+      where: {
+        date: todayDateOnly,
+        userId: { in: users.map((u) => u.id) },
+        deletedAt: null,
+      },
+    });
+
+    return users.map((u) => {
+      const record = attendanceRecords.find((r) => r.userId === u.id);
+      return {
+        ...this._sanitize(u),
+        attendanceStatus: record ? record.status : 'ABSENT',
+      };
+    });
   }
 
   async findById(id: string) {
@@ -120,8 +172,8 @@ export class StaffService {
       state: user.state || null,
       country: user.country || null,
       postalCode: user.postalCode || null,
-      departmentId: user.departmentId || null,
-      designationId: user.designationId || null,
+      departmentId: user.department || null,
+      designationId: user.designation || null,
       probationEndDate: user.probationEndDate || null,
       reportingManagerId: user.reportingManagerId || null,
       employmentType: user.employmentType || null,
@@ -155,7 +207,7 @@ export class StaffService {
     };
   }
 
-  async update(id: string, dto: UpdateStaffDto) {
+  async update(id: string, dto: UpdateStaffDto, actor: RequestUser) {
     const existing = await this.userRepo.findById(id);
     if (!existing) throw new NotFoundException('Staff member not found');
 
@@ -167,13 +219,37 @@ export class StaffService {
       updates.lastName = parts.slice(1).join(' ') || '';
     }
 
-    const updated = await this.userRepo.updateById(id, updates);
+    if (dto.role && dto.role !== existing.role) {
+      if (actor.workspaceId) {
+        const workspaceMember = await this.workspaceMemberRepo.findByWorkspaceAndUser(actor.workspaceId, existing.id);
+        if (workspaceMember) {
+          await this.workspaceMemberRepo.updateMember(actor.workspaceId, existing.id, {
+            role: dto.role,
+            updatedBy: actor.id,
+          });
+        }
+      }
+
+      await this.auditService.log({
+        userId: actor.id,
+        workspaceId: actor.workspaceId,
+        action: 'ROLE_CHANGE',
+        module: 'STAFF',
+        oldData: { role: existing.role },
+        newData: { role: dto.role },
+        detail: `Updated role of user ${existing.email} from ${existing.role} to ${dto.role}`,
+      });
+    }
+
+    const updated = await this.userRepo.updateById(existing.id, updates);
     return this._sanitize(updated!);
   }
 
   async delete(id: string, actorId: string): Promise<void> {
-    if (id === actorId) throw new ForbiddenException('Cannot delete your own account');
-    const deleted = await this.userRepo.deleteById(id);
+    const user = await this.userRepo.findById(id);
+    if (!user) throw new NotFoundException('Staff member not found');
+    if (user.id === actorId) throw new ForbiddenException('Cannot delete your own account');
+    const deleted = await this.userRepo.deleteById(user.id);
     if (!deleted) throw new NotFoundException('Staff member not found');
   }
 

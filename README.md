@@ -49,6 +49,13 @@ Enterprise-grade Staff Management & Attendance Tracking REST API built with **Ne
   - [Dashboard](#dashboard)
     - [Get Admin Dashboard](#get-admin-dashboard)
     - [Get Staff Dashboard](#get-staff-dashboard)
+  - [Meetings](#meetings)
+    - [Fetch All Meetings](#fetch-all-meetings)
+    - [Create Meeting](#create-meeting)
+  - [Leave Management](#leave-management)
+    - [Fetch All Leaves](#fetch-all-leaves)
+    - [Submit Leave Request](#submit-leave-request)
+    - [Update Leave Status](#update-leave-status)
 - [Error Responses](#error-responses)
 - [HTTP Status Codes](#http-status-codes)
 
@@ -76,11 +83,10 @@ Enterprise-grade Staff Management & Attendance Tracking REST API built with **Ne
 ## Database Architecture
 
 OZMO SYNC uses a strictly separated schema structure mapping to a multi-tenant PostgreSQL database:
-- **`users` table**: Handles core identity, credentials, roles, and status. It also stores `firstName` and `lastName` to ensure all users have names regardless of their role.
-- **`staff_profiles` table**: Holds all HR-related employee fields, contact info, and role designations. *(Note: Users with the `ADMIN` or `SUPER_ADMIN` role do NOT receive a `staff_profiles` record. Their data is fully contained in the `users` table.)*
-- **Enterprise Modules**: Additional models mapped for Leave Management (`leave_types`, `leave_requests`), Projects (`projects`, `project_members`, `tasks`), and `notifications`.
-
-*(Note: While the database layer strictly separates these domains, the API abstracts them transparently behind unified JSON entities, meaning your HTTP payloads and responses remain entirely unaffected by this role-based architecture separation!)*
+- **`workspaces` table**: Stores multiple workspace profiles (such as code, slug, name, etc.).
+- **`users` table**: Handles core identity, credentials, roles, and status. Reusable profile fields (address, emergency contact, bio, etc.) are consolidated directly onto this table to support clean query scopes while preserving backward compatibility.
+- **`workspace_members` table**: Joins users and workspaces in a many-to-many relationship, defining workspace-specific roles, designations, departments, reporting manager links, and joining dates.
+- **Enterprise Modules**: Additional models mapped for Leave Management (`leave_types`, `leave_requests`, `leave_balances`), Projects (`projects`, `project_members`, `tasks`), and `notifications`, strictly isolated using workspace IDs.
 
 ---
 
@@ -202,13 +208,11 @@ Server starts at `http://localhost:4000/api/v1`
 
 | Role          | Description                               |
 | ------------- | ----------------------------------------- |
-| `SUPER_ADMIN` | Full system access                        |
-| `ADMIN`       | User & staff management, full attendance  |
-| `HR`          | Staff CRUD, attendance reporting          |
-| `MANAGER`     | View staff lists and attendance           |
-| `TEAM_LEAD`   | Attendance check-in/out, view own team    |
-| `STAFF`       | Own attendance only                       |
-| `GUEST`       | Read-only (reserved)                      |
+| `SUPER_ADMIN` | Platform Administrator                    |
+| `ADMIN`       | Workspace Administrator                   |
+| `HR`          | Human Resources                           |
+| `TEAM_LEAD`   | Team Leader                               |
+| `STAFF`       | Standard Employee                         |
 
 RBAC is enforced via `@Roles()` decorator + `RolesGuard` at the controller level. Public routes (register, login, refresh) require no token.
 
@@ -241,7 +245,19 @@ All responses share the same structure.
 {
   "success": false,
   "message": "Human-readable error",
-  "timestamp": "2026-05-31T10:00:00.000Z"
+  "timestamp": "2026-05-31T10:00:00.000Z",
+  "errorCode": "ERROR_CODE_STRING"
+}
+```
+
+#### Duplicate Request Protection
+All write operations (`POST`, `PUT`, `DELETE`, `PATCH`) are protected against parallel duplicate submissions (e.g. user double-taps). Parallel requests with the same user ID, HTTP method, path, and request body parameters will return a lock conflict error:
+```json
+{
+  "success": false,
+  "message": "REQUEST_ALREADY_IN_PROGRESS",
+  "timestamp": "2026-06-10T00:55:00.000Z",
+  "errorCode": "REQUEST_ALREADY_IN_PROGRESS"
 }
 ```
 
@@ -271,29 +287,31 @@ To ensure consistent and readable time presentation across clients (such as mobi
 | `PUT`    | `/auth/change-password`         | JWT         | Any                                |
 | `POST`   | `/auth/forgot-password`         | None        | —                                  |
 | `POST`   | `/auth/reset-password`          | None        | —                                  |
+| `POST`   | `/auth/workspaces/switch`       | JWT         | Any                                |
 | `GET`    | `/profile`                      | JWT         | Any                                |
 | `PUT`    | `/profile`                      | JWT         | Any                                |
-| `GET`    | `/users`                        | JWT + Roles | `ADMIN` `HR` `MANAGER`             |
-| `GET`    | `/users/:id`                    | JWT + Roles | `ADMIN` `HR` `MANAGER`             |
+| `GET`    | `/users`                        | JWT + Roles | `ADMIN` `HR` `TEAM_LEAD`           |
+| `GET`    | `/users/:id`                    | JWT + Roles | `ADMIN` `HR` `TEAM_LEAD`           |
 | `DELETE` | `/users/:id`                    | JWT + Roles | `ADMIN`                            |
 | `GET`    | `/attendance/status`            | JWT         | Any                                |
-| `POST`   | `/attendance/check-in`          | JWT + Roles | `STAFF` `TEAM_LEAD`                |
-| `POST`   | `/attendance/check-out`         | JWT + Roles | `STAFF` `TEAM_LEAD`                |
+| `POST`   | `/attendance/check-in`          | JWT + Roles | `STAFF` `TEAM_LEAD` `ADMIN` `HR`    |
+| `POST`   | `/attendance/check-out`         | JWT + Roles | `STAFF` `TEAM_LEAD` `ADMIN` `HR`    |
 | `GET`    | `/attendance/my`                | JWT         | Any                                |
-| `GET`    | `/attendance/dashboard`         | JWT + Roles | `ADMIN` `HR` `MANAGER`             |
-| `GET`    | `/attendance/:userId`           | JWT + Roles | `ADMIN` `HR` `MANAGER`             |
+| `GET`    | `/attendance/dashboard`         | JWT + Roles | `ADMIN` `HR` `TEAM_LEAD`           |
+| `GET`    | `/attendance/:userId`           | JWT + Roles | `ADMIN` `HR` `TEAM_LEAD`           |
 | `POST`   | `/staff`                        | JWT + Roles | `ADMIN` `HR`                       |
-| `GET`    | `/staff`                        | JWT + Roles | `ADMIN` `HR` `MANAGER`             |
-| `GET`    | `/staff/search?q=`              | JWT + Roles | `ADMIN` `HR` `MANAGER`             |
-| `GET`    | `/staff/filter`                 | JWT + Roles | `ADMIN` `HR` `MANAGER`             |
-| `GET`    | `/staff/:id`                    | JWT + Roles | `ADMIN` `HR` `MANAGER` `TEAM_LEAD` |
+| `GET`    | `/staff`                        | JWT + Roles | `ADMIN` `HR` `TEAM_LEAD`           |
+| `GET`    | `/staff/search?q=`              | JWT + Roles | `ADMIN` `HR` `TEAM_LEAD`           |
+| `GET`    | `/staff/filter`                 | JWT + Roles | `ADMIN` `HR` `TEAM_LEAD`           |
+| `GET`    | `/staff/:id`                    | JWT + Roles | `ADMIN` `HR` `TEAM_LEAD`           |
 | `PUT`    | `/staff/:id`                    | JWT + Roles | `ADMIN` `HR`                       |
 | `DELETE` | `/staff/:id`                    | JWT + Roles | `ADMIN`                            |
+| `GET`    | `/workspaces`                   | JWT         | Any                                |
 | `GET`    | `/workspaces/my-workspace`      | JWT + Roles | `ADMIN` `SUPER_ADMIN`              |
 | `POST`   | `/invitations`                  | JWT + Roles | `ADMIN` `SUPER_ADMIN`              |
 | `GET`    | `/invitations`                  | JWT + Roles | `ADMIN` `SUPER_ADMIN`              |
 | `POST`   | `/invitations/:token/revoke`    | JWT + Roles | `ADMIN` `SUPER_ADMIN`              |
-| `GET`    | `/dashboard/admin`              | JWT + Roles | `ADMIN` `SUPER_ADMIN` `HR` `MANAGER`|
+| `GET`    | `/dashboard/admin`              | JWT + Roles | `ADMIN` `SUPER_ADMIN` `HR` `TEAM_LEAD` |
 | `GET`    | `/dashboard/staff`              | JWT         | Any                                |
 
 ---
@@ -561,6 +579,52 @@ curl -X POST http://localhost:4000/api/v1/auth/logout \
 
 ---
 
+#### Switch Workspace
+
+Authenticate and switch to another workspace context the user is a member of. Returns a new access and refresh token pair containing the selected workspace context claims and corresponding workspace membership role.
+
+**`POST /api/v1/auth/workspaces/switch`** — Auth: Bearer token
+
+##### Request Body
+
+| Field          | Type   | Required | Description                        |
+| -------------- | ------ | :------: | ---------------------------------- |
+| `workspaceId`  | string | Yes      | Workspace UUID to switch context to|
+
+```json
+{
+  "workspaceId": "a90fde09-5431-41fb-89ad-902e4d5fb23a"
+}
+```
+
+##### Response — `200 OK`
+
+```json
+{
+  "success": true,
+  "message": "Workspace context switched successfully",
+  "data": {
+    "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...(new)",
+    "refreshToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...(new)",
+    "user": {
+      "id": "3f2e1a4b-...",
+      "email": "jane.smith@ozmo.io",
+      "role": "HR"
+    }
+  },
+  "timestamp": "2026-05-31T10:11:00.000Z"
+}
+```
+
+```bash
+curl -X POST http://localhost:4000/api/v1/auth/workspaces/switch \
+  -H "Authorization: Bearer <ACCESS_TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{"workspaceId":"a90fde09-5431-41fb-89ad-902e4d5fb23a"}'
+```
+
+---
+
 #### Change Initial Password
 
 For newly created staff logging in with a temporary password, the system forces a password change before they can access the application.
@@ -765,7 +829,7 @@ curl -X PUT http://localhost:4000/api/v1/profile \
 
 #### List All Users
 
-**`GET /api/v1/users`** — Auth: Bearer token | Roles: `ADMIN` `HR` `MANAGER`
+**`GET /api/v1/users`** — Auth: Bearer token | Roles: `ADMIN` `HR` `TEAM_LEAD`
 
 ```bash
 curl http://localhost:4000/api/v1/users \
@@ -796,7 +860,7 @@ curl http://localhost:4000/api/v1/users \
 
 #### Get User by ID
 
-**`GET /api/v1/users/:id`** — Auth: Bearer token | Roles: `ADMIN` `HR` `MANAGER`
+**`GET /api/v1/users/:id`** — Auth: Bearer token | Roles: `ADMIN` `HR` `TEAM_LEAD`
 
 ```bash
 curl http://localhost:4000/api/v1/users/3f2e1a4b-... \
@@ -981,7 +1045,7 @@ curl "http://localhost:4000/api/v1/attendance/my?month=2026-05" \
 
 #### Get Attendance Dashboard
 
-**`GET /api/v1/attendance/dashboard`** — Auth: Bearer token | Roles: `ADMIN` `HR` `MANAGER`
+**`GET /api/v1/attendance/dashboard`** — Auth: Bearer token | Roles: `ADMIN` `HR` `TEAM_LEAD`
 
 Returns aggregated presence stats for all staff. Accepts the same query params as `/attendance/my`. Defaults to today if no query is provided.
 
@@ -1015,7 +1079,7 @@ curl "http://localhost:4000/api/v1/attendance/dashboard?date=2026-05-31" \
 
 #### Get Attendance for a User
 
-**`GET /api/v1/attendance/:userId`** — Auth: Bearer token | Roles: `ADMIN` `HR` `MANAGER`
+**`GET /api/v1/attendance/:userId`** — Auth: Bearer token | Roles: `ADMIN` `HR` `TEAM_LEAD`
 
 Accepts the same query parameters as `/attendance/my`.
 
@@ -1050,7 +1114,7 @@ curl "http://localhost:4000/api/v1/attendance/3f2e1a4b-...?month=2026-05" \
   "fullName": "Ahmad Razif",
   "email": "ahmad.razif@ozmo.io",
   "temporaryPassword": "Welcome@123",
-  "role": "MANAGER",
+  "role": "TEAM_LEAD",
   "department": "Operations",
   "joiningDate": "2026-06-01"
 }
@@ -1064,7 +1128,7 @@ curl -X POST http://localhost:4000/api/v1/staff \
     "fullName": "Ahmad Razif",
     "email": "ahmad.razif@ozmo.io",
     "temporaryPassword": "Welcome@123",
-    "role": "MANAGER",
+    "role": "TEAM_LEAD",
     "department": "Operations",
     "joiningDate": "2026-06-01"
   }'
@@ -1089,7 +1153,7 @@ curl -X POST http://localhost:4000/api/v1/staff \
 
 #### List All Staff
 
-**`GET /api/v1/staff`** — Auth: Bearer token | Roles: `ADMIN` `HR` `MANAGER`
+**`GET /api/v1/staff`** — Auth: Bearer token | Roles: `ADMIN` `HR` `TEAM_LEAD`
 
 ##### Query Parameters (all optional)
 
@@ -1111,7 +1175,7 @@ curl "http://localhost:4000/api/v1/staff?page=1&limit=20&role=STAFF&sort=name" \
 
 #### Search Staff
 
-**`GET /api/v1/staff/search?q=`** — Auth: Bearer token | Roles: `ADMIN` `HR` `MANAGER`
+**`GET /api/v1/staff/search?q=`** — Auth: Bearer token | Roles: `ADMIN` `HR` `TEAM_LEAD`
 
 Searches across `firstName`, `lastName`, `email`, `employeeId`, and `department`.
 
@@ -1147,13 +1211,13 @@ curl "http://localhost:4000/api/v1/staff/search?q=ahmad" \
 
 #### Filter Staff
 
-**`GET /api/v1/staff/filter`** — Auth: Bearer token | Roles: `ADMIN` `HR` `MANAGER`
+**`GET /api/v1/staff/filter`** — Auth: Bearer token | Roles: `ADMIN` `HR` `TEAM_LEAD`
 
 | Param        | Type   | Values                                                       |
 | ------------ | ------ | ------------------------------------------------------------ |
 | `department` | string | Any string                                                   |
 | `status`     | enum   | `ACTIVE` `INACTIVE` `RESIGNED` `TERMINATED`                  |
-| `role`       | enum   | `SUPER_ADMIN` `ADMIN` `HR` `MANAGER` `TEAM_LEAD` `STAFF` `GUEST` |
+| `role`       | enum   | `SUPER_ADMIN` `ADMIN` `HR` `TEAM_LEAD` `STAFF` |
 
 ```bash
 curl "http://localhost:4000/api/v1/staff/filter?department=Engineering&status=ACTIVE" \
@@ -1164,7 +1228,7 @@ curl "http://localhost:4000/api/v1/staff/filter?department=Engineering&status=AC
 
 #### Get Staff by ID
 
-**`GET /api/v1/staff/:id`** — Auth: Bearer token | Roles: `ADMIN` `HR` `MANAGER` `TEAM_LEAD`
+**`GET /api/v1/staff/:id`** — Auth: Bearer token | Roles: `ADMIN` `HR` `TEAM_LEAD`
 
 ```bash
 curl http://localhost:4000/api/v1/staff/3f2e1a4b-... \
@@ -1394,7 +1458,7 @@ Invite a new member to join the workspace. Generates a unique registration token
 | Field  | Type   | Required | Description                        |
 | ------ | ------ | :------: | ---------------------------------- |
 | `email` | string |   Yes    | Invitee email address.             |
-| `role`  | enum   |   Yes    | Assignable Role (e.g. `STAFF`, `HR`, `MANAGER`). |
+| `role`  | enum   |   Yes    | Assignable Role (e.g. `STAFF`, `HR`, `TEAM_LEAD`). |
 
 ```json
 {
@@ -1503,7 +1567,7 @@ curl -X POST http://localhost:4000/api/v1/invitations/c3617be3-fe44-4861-ad81-cf
 
 Retrieve statistics for the administration dashboard, reflecting the total and active workforce.
 
-**`GET /api/v1/dashboard/admin`** — Auth: Bearer token | Roles: `ADMIN`, `SUPER_ADMIN`, `HR`, `MANAGER`
+**`GET /api/v1/dashboard/admin`** — Auth: Bearer token | Roles: `ADMIN`, `SUPER_ADMIN`, `HR`, `TEAM_LEAD`
 
 ##### Response — `200 OK`
 
@@ -1554,6 +1618,703 @@ Retrieve personal workspace statistics for the currently authenticated staff mem
 ```bash
 curl http://localhost:4000/api/v1/dashboard/staff \
   -H "Authorization: Bearer <ACCESS_TOKEN>"
+```
+
+---
+
+### Meetings
+
+#### Fetch All Meetings
+
+**`GET /api/v1/meetings`** — Auth: Bearer token | Roles: Any
+
+##### Response — `200 OK`
+
+```json
+{
+  "success": true,
+  "message": "Meetings fetched successfully",
+  "data": [
+    {
+      "id": "meet_001",
+      "workspaceId": "790cb3f8-bcac-444c-9c79-f66dc33f9818",
+      "title": "Sprint Planning & Standup",
+      "description": "Aligning on deliverables and tasks for current sprint.",
+      "dateTime": "2026-06-09T09:30:00.000Z",
+      "link": "https://meet.google.com/abc-defg-hij",
+      "duration": "30 mins",
+      "createdAt": "2026-06-09T09:30:00.000Z",
+      "updatedAt": "2026-06-09T09:30:00.000Z"
+    }
+  ],
+  "timestamp": "2026-06-09T14:30:00.000Z"
+}
+```
+
+```bash
+curl http://localhost:4000/api/v1/meetings \
+  -H "Authorization: Bearer <ACCESS_TOKEN>"
+```
+
+---
+
+#### Create Meeting
+
+**`POST /api/v1/meetings`** — Auth: Bearer token | Roles: `ADMIN` `SUPER_ADMIN` `HR` `TEAM_LEAD`
+
+##### Request Body
+
+| Field | Type | Required | Description |
+| --- | --- | :---: | --- |
+| `title` | string | Yes | Meeting title |
+| `description` | string | No | Meeting description |
+| `dateTime` | string | Yes | ISO 8601 Date/Time string |
+| `link` | string | Yes | Meeting URL link |
+| `duration` | string | Yes | Meeting duration (e.g. `45 mins`) |
+
+```json
+{
+  "title": "Client Progress Review",
+  "description": "Weekly alignment sync with clients.",
+  "dateTime": "2026-06-10T15:00:00.000Z",
+  "link": "https://meet.google.com/xyz-uvwx-123",
+  "duration": "45 mins"
+}
+```
+
+##### Response — `201 Created`
+
+```json
+{
+  "success": true,
+  "message": "Meeting created successfully",
+  "data": {
+    "id": "e3617be3-fe44-4861-ad81-cfb01f652cb9",
+    "workspaceId": "790cb3f8-bcac-444c-9c79-f66dc33f9818",
+    "title": "Client Progress Review",
+    "description": "Weekly alignment sync with clients.",
+    "dateTime": "2026-06-10T15:00:00.000Z",
+    "link": "https://meet.google.com/xyz-uvwx-123",
+    "duration": "45 mins",
+    "createdAt": "2026-06-09T15:35:00.000Z",
+    "updatedAt": "2026-06-09T15:35:00.000Z"
+  },
+  "timestamp": "2026-06-09T15:35:00.000Z"
+}
+```
+
+```bash
+curl -X POST http://localhost:4000/api/v1/meetings \
+  -H "Authorization: Bearer <ACCESS_TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "Client Progress Review",
+    "description": "Weekly alignment sync with clients.",
+    "dateTime": "2026-06-10T15:00:00.000Z",
+    "link": "https://meet.google.com/xyz-uvwx-123",
+    "duration": "45 mins"
+  }'
+```
+
+---
+
+### Leave Management
+
+#### Fetch All Leaves
+
+**`GET /api/v1/leaves`** — Auth: Bearer token | Roles: Any (Staff gets own leaves, Admin/HR/Team Lead gets all leaves in workspace)
+
+##### Response — `200 OK`
+
+```json
+{
+  "success": true,
+  "message": "Leaves fetched successfully",
+  "data": [
+    {
+      "id": "lv_101",
+      "workspaceId": "790cb3f8-bcac-444c-9c79-f66dc33f9818",
+      "userId": "3f2e1a4b-...",
+      "employeeId": "emp_001",
+      "employeeName": "Arjun Mehta",
+      "department": "Tech Division",
+      "teamId": "team_tech",
+      "category": "casual",
+      "priority": "normal",
+      "startDate": "2026-06-12T00:00:00.000Z",
+      "endDate": "2026-06-14T00:00:00.000Z",
+      "days": 3,
+      "reason": "Urgent family event",
+      "hasAttachment": false,
+      "status": "pending",
+      "impactLevel": "low",
+      "coverageStatus": "none",
+      "teamLeadNote": "",
+      "approvedBy": null,
+      "rejectionReason": null,
+      "reviewedAt": null,
+      "appliedAt": "2026-06-09T14:30:00.000Z",
+      "createdAt": "2026-06-09T14:30:00.000Z",
+      "updatedAt": "2026-06-09T14:30:00.000Z"
+    }
+  ],
+  "timestamp": "2026-06-09T14:30:00.000Z"
+}
+```
+
+```bash
+curl http://localhost:4000/api/v1/leaves \
+  -H "Authorization: Bearer <ACCESS_TOKEN>"
+```
+
+---
+
+#### Submit Leave Request
+
+**`POST /api/v1/leaves`** — Auth: Bearer token | Roles: Any
+
+##### Request Body
+
+| Field | Type | Required | Description |
+| --- | --- | :---: | --- |
+| `id` | string | No | Optional custom ID (e.g. `lv_102`) |
+| `employeeId` | string | Yes | Staff member's employee ID |
+| `employeeName` | string | Yes | Staff member's full name |
+| `department` | string | No | Department name |
+| `teamId` | string | No | Team ID |
+| `category` | string | Yes | Leave category (`casual`, `sick`, `paid`, `compOff`, `wfh`, `halfDay`) |
+| `priority` | string | Yes | Priority level (`low`, `normal`, `high`, `urgent`) |
+| `startDate` | string | Yes | ISO 8601 Date string |
+| `endDate` | string | Yes | ISO 8601 Date string |
+| `days` | number | Yes | Total days |
+| `reason` | string | Yes | Leave reason |
+| `hasAttachment` | boolean | No | Whether an attachment is included |
+| `status` | string | No | Defaults to `pending` |
+| `impactLevel` | string | No | Defaults to `low` |
+| `coverageStatus` | string | No | Defaults to `none` |
+| `teamLeadNote` | string | No | Optional note |
+
+```json
+{
+  "id": "lv_102",
+  "employeeId": "emp_001",
+  "employeeName": "Arjun Mehta",
+  "department": "Tech Division",
+  "teamId": "team_tech",
+  "category": "sick",
+  "priority": "high",
+  "startDate": "2026-06-15T00:00:00.000Z",
+  "endDate": "2026-06-15T00:00:00.000Z",
+  "days": 1,
+  "reason": "Doctor appointment",
+  "hasAttachment": false
+}
+```
+
+##### Response — `201 Created`
+
+```json
+{
+  "success": true,
+  "message": "Leave request submitted successfully",
+  "data": {
+    "id": "lv_102",
+    "workspaceId": "790cb3f8-bcac-444c-9c79-f66dc33f9818",
+    "userId": "9a6c910a-bd46-4aa2-b459-f21c0f6c5bfc",
+    "employeeId": "emp_001",
+    "employeeName": "Arjun Mehta",
+    "department": "Tech Division",
+    "teamId": "team_tech",
+    "category": "sick",
+    "priority": "high",
+    "startDate": "2026-06-15T00:00:00.000Z",
+    "endDate": "2026-06-15T00:00:00.000Z",
+    "days": 1,
+    "reason": "Doctor appointment",
+    "hasAttachment": false,
+    "status": "pending",
+    "impactLevel": "low",
+    "coverageStatus": "none",
+    "teamLeadNote": "",
+    "approvedBy": null,
+    "rejectionReason": null,
+    "reviewedAt": null,
+    "appliedAt": "2026-06-09T15:35:00.000Z",
+    "createdAt": "2026-06-09T15:35:00.000Z",
+    "updatedAt": "2026-06-09T15:35:00.000Z"
+  },
+  "timestamp": "2026-06-09T15:35:00.000Z"
+}
+```
+
+```bash
+curl -X POST http://localhost:4000/api/v1/leaves \
+  -H "Authorization: Bearer <ACCESS_TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "id": "lv_102",
+    "employeeId": "emp_001",
+    "employeeName": "Arjun Mehta",
+    "department": "Tech Division",
+    "teamId": "team_tech",
+    "category": "sick",
+    "priority": "high",
+    "startDate": "2026-06-15T00:00:00.000Z",
+    "endDate": "2026-06-15T00:00:00.000Z",
+    "days": 1,
+    "reason": "Doctor appointment",
+    "hasAttachment": false
+  }'
+```
+
+---
+
+#### Update Leave Status
+
+**`PUT /api/v1/leaves/:id/status`** — Auth: Bearer token | Roles: `ADMIN` `SUPER_ADMIN` `HR` `TEAM_LEAD`
+
+##### Request Body (Option A: Approve)
+
+```json
+{
+  "status": "APPROVED",
+  "approvedBy": "Admin Name"
+}
+```
+
+##### Request Body (Option B: Reject)
+
+```json
+{
+  "status": "REJECTED",
+  "rejectedBy": "Admin Name",
+  "rejectionReason": "Project release critical phase coverage needed"
+}
+```
+
+##### Response — `200 OK`
+
+```json
+{
+  "success": true,
+  "message": "Leave status updated successfully",
+  "data": {
+    "id": "lv_102",
+    "workspaceId": "790cb3f8-bcac-444c-9c79-f66dc33f9818",
+    "userId": "9a6c910a-bd46-4aa2-b459-f21c0f6c5bfc",
+    "employeeId": "emp_001",
+    "employeeName": "Arjun Mehta",
+    "department": "Tech Division",
+    "teamId": "team_tech",
+    "category": "sick",
+    "priority": "high",
+    "startDate": "2026-06-15T00:00:00.000Z",
+    "endDate": "2026-06-15T00:00:00.000Z",
+    "days": 1,
+    "reason": "Doctor appointment",
+    "hasAttachment": false,
+    "status": "approved",
+    "impactLevel": "low",
+    "coverageStatus": "none",
+    "teamLeadNote": "",
+    "approvedBy": "Admin Name",
+    "rejectionReason": null,
+    "reviewedAt": "2026-06-09T15:35:00.000Z",
+    "appliedAt": "2026-06-09T15:35:00.000Z",
+    "createdAt": "2026-06-09T15:35:00.000Z",
+    "updatedAt": "2026-06-09T15:35:00.000Z"
+  },
+  "timestamp": "2026-06-09T15:35:00.000Z"
+}
+```
+
+```bash
+curl -X PUT http://localhost:4000/api/v1/leaves/lv_102/status \
+  -H "Authorization: Bearer <ACCESS_TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{"status":"APPROVED","approvedBy":"Admin Name"}'
+```
+
+---
+
+### Audit Logs
+
+#### Fetch Audit Logs
+
+**`GET /api/v1/audit`** — Auth: Bearer token | Roles: `SUPER_ADMIN`, `ADMIN`, `HR`
+
+##### Query Parameters
+
+All parameters are optional.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `action` | string | Filter logs by specific action name |
+| `entityType` | string | Filter logs by entity type/module |
+| `actorId` | string | Filter logs by user ID (actor) |
+| `workspaceId` | string | Filter logs by workspace ID |
+| `from` | string (ISO-8601) | Filter logs starting from date |
+| `to` | string (ISO-8601) | Filter logs up to date |
+| `limit` | number | Page size limit (default `50`, max `200`) |
+| `offset` | number | Page offset (default `0`) |
+
+##### Response — `200 OK`
+
+```json
+{
+  "success": true,
+  "message": "Audit logs retrieved",
+  "data": {
+    "entries": [
+      {
+        "id": "ad_89c81b24-11e2-45e3-9824-a78c1873130d",
+        "action": "DATA_EXPORTED",
+        "entityType": "ATTENDANCE",
+        "entityId": "ad_89c81b24-11e2-45e3-9824-a78c1873130d",
+        "actor": "admin@company.com",
+        "actorId": "9a6c910a-bd46-4aa2-b459-f21c0f6c5bfc",
+        "ipAddress": "127.0.0.1",
+        "workspaceId": "790cb3f8-bcac-444c-9c79-f66dc33f9818",
+        "detail": "Exported ATTENDANCE as CSV — attendance_report.csv",
+        "timestamp": "2026-06-09T15:35:00.000Z"
+      }
+    ],
+    "total": 1,
+    "limit": 50,
+    "offset": 0
+  },
+  "timestamp": "2026-06-09T15:35:00.000Z"
+}
+```
+
+```bash
+curl http://localhost:4000/api/v1/audit?limit=10 \
+  -H "Authorization: Bearer <ACCESS_TOKEN>"
+```
+
+---
+
+#### Get Entity Audit Log
+
+**`GET /api/v1/audit/:entityId`** — Auth: Bearer token | Roles: `SUPER_ADMIN`, `ADMIN`, `HR`
+
+##### Response — `200 OK`
+
+```json
+{
+  "success": true,
+  "message": "Entity audit log retrieved",
+  "data": [
+    {
+      "id": "ad_89c81b24-11e2-45e3-9824-a78c1873130d",
+      "action": "DATA_EXPORTED",
+      "entityType": "ATTENDANCE",
+      "entityId": "ad_89c81b24-11e2-45e3-9824-a78c1873130d",
+      "actor": "admin@company.com",
+      "actorId": "9a6c910a-bd46-4aa2-b459-f21c0f6c5bfc",
+      "ipAddress": "127.0.0.1",
+      "workspaceId": "790cb3f8-bcac-444c-9c79-f66dc33f9818",
+      "detail": "Exported ATTENDANCE as CSV — attendance_report.csv",
+      "timestamp": "2026-06-09T15:35:00.000Z"
+    }
+  ],
+  "timestamp": "2026-06-09T15:35:00.000Z"
+}
+```
+
+```bash
+curl http://localhost:4000/api/v1/audit/ad_89c81b24-11e2-45e3-9824-a78c1873130d \
+  -H "Authorization: Bearer <ACCESS_TOKEN>"
+```
+
+---
+
+### Notifications
+
+#### Fetch Notifications
+
+**`GET /api/v1/notifications`** — Auth: Bearer token | Roles: Any
+
+##### Response — `200 OK`
+
+```json
+{
+  "success": true,
+  "message": "Notifications fetched successfully",
+  "data": [
+    {
+      "id": "nt_89cb18e4-18c7-4ab2-921a-c71b162f48da",
+      "workspaceId": "790cb3f8-bcac-444c-9c79-f66dc33f9818",
+      "userId": "9a6c910a-bd46-4aa2-b459-f21c0f6c5bfc",
+      "title": "Leave Approved",
+      "message": "Your leave request for 2026-06-15 has been approved.",
+      "type": "leaveAlerts",
+      "isRead": false,
+      "actionId": "lv_102",
+      "createdAt": "2026-06-09T15:35:00.000Z",
+      "updatedAt": "2026-06-09T15:35:00.000Z",
+      "deletedAt": null,
+      "createdBy": null,
+      "updatedBy": null
+    }
+  ],
+  "timestamp": "2026-06-09T15:35:00.000Z"
+}
+```
+
+```bash
+curl http://localhost:4000/api/v1/notifications \
+  -H "Authorization: Bearer <ACCESS_TOKEN>"
+```
+
+---
+
+#### Mark Notification as Read
+
+**`PATCH /api/v1/notifications/:id/read`** — Auth: Bearer token | Roles: Any
+
+##### Response — `200 OK`
+
+```json
+{
+  "success": true,
+  "message": "Notification marked as read",
+  "data": {
+    "id": "nt_89cb18e4-18c7-4ab2-921a-c71b162f48da",
+    "workspaceId": "790cb3f8-bcac-444c-9c79-f66dc33f9818",
+    "userId": "9a6c910a-bd46-4aa2-b459-f21c0f6c5bfc",
+    "title": "Leave Approved",
+    "message": "Your leave request for 2026-06-15 has been approved.",
+    "type": "leaveAlerts",
+    "isRead": true,
+    "actionId": "lv_102",
+    "createdAt": "2026-06-09T15:35:00.000Z",
+    "updatedAt": "2026-06-09T15:35:00.000Z",
+    "deletedAt": null,
+    "createdBy": null,
+    "updatedBy": null
+  },
+  "timestamp": "2026-06-09T15:35:00.000Z"
+}
+```
+
+```bash
+curl -X PATCH http://localhost:4000/api/v1/notifications/nt_89cb18e4-18c7-4ab2-921a-c71b162f48da/read \
+  -H "Authorization: Bearer <ACCESS_TOKEN>"
+```
+
+---
+
+#### Mark All Notifications as Read
+
+**`POST /api/v1/notifications/read-all`** — Auth: Bearer token | Roles: Any
+
+##### Response — `200 OK`
+
+```json
+{
+  "success": true,
+  "message": "All notifications marked as read",
+  "data": {
+    "success": true
+  },
+  "timestamp": "2026-06-09T15:35:00.000Z"
+}
+```
+
+```bash
+curl -X POST http://localhost:4000/api/v1/notifications/read-all \
+  -H "Authorization: Bearer <ACCESS_TOKEN>"
+```
+
+---
+
+### Holidays
+
+#### Fetch Holidays
+
+**`GET /api/v1/holidays`** — Auth: Bearer token | Roles: Any
+
+##### Response — `200 OK`
+
+```json
+{
+  "success": true,
+  "message": "Holidays fetched successfully",
+  "data": [
+    {
+      "id": "hl_5bca29ef-1e23-4b9d-adbc-c781bf6d182e",
+      "workspaceId": "790cb3f8-bcac-444c-9c79-f66dc33f9818",
+      "name": "Independence Day",
+      "date": "2026-07-04T00:00:00.000Z",
+      "type": "publicHoliday",
+      "description": "National holiday celebrating independence.",
+      "notes": "Office closed.",
+      "repeatYearly": true,
+      "createdAt": "2026-06-09T15:35:00.000Z",
+      "updatedAt": "2026-06-09T15:35:00.000Z"
+    }
+  ],
+  "timestamp": "2026-06-09T15:35:00.000Z"
+}
+```
+
+```bash
+curl http://localhost:4000/api/v1/holidays \
+  -H "Authorization: Bearer <ACCESS_TOKEN>"
+```
+
+---
+
+### Reports
+
+#### Export Data
+
+**`GET /api/v1/reports/export`** — Auth: Bearer token | Roles: `ADMIN`, `SUPER_ADMIN`, `HR`
+
+##### Query Parameters
+
+| Field | Type | Required | Description |
+| --- | --- | :---: | --- |
+| `module` | string | Yes | Module name to export (e.g. `ATTENDANCE`, `LEAVES`, `STAFF`, `HOLIDAYS`) |
+| `format` | string | Yes | Export file format (`CSV` or `PDF`) |
+| `from` | string | No | Filter data from start date (ISO-8601) |
+| `to` | string | No | Filter data to end date (ISO-8601) |
+
+##### Response — `200 OK`
+
+Returns the generated file stream as a downloadable attachment.
+
+```bash
+curl "http://localhost:4000/api/v1/reports/export?module=ATTENDANCE&format=CSV" \
+  -H "Authorization: Bearer <ACCESS_TOKEN>" \
+  -o attendance_report.csv
+```
+
+---
+
+### Careers
+
+#### List Job Openings
+
+**`GET /api/v1/careers/jobs`** — Auth: Public | Roles: Public (No token required)
+
+##### Query Parameters
+
+All parameters are optional.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `department` | string | Filter jobs by department name |
+| `location` | string | Filter jobs by location |
+| `employmentType` | enum | Filter jobs by employment type (`FULL_TIME`, `PART_TIME`, `CONTRACT`, `INTERN`) |
+| `experienceLevel` | enum | Filter jobs by experience level (`ENTRY`, `MID`, `SENIOR`, `LEAD`, `EXECUTIVE`) |
+| `search` | string | Keyword search on title/description |
+
+##### Response — `200 OK`
+
+```json
+{
+  "success": true,
+  "message": "Job listings retrieved",
+  "data": [
+    {
+      "id": "jb_f9bc2891-9e23-4ba9-adcd-e7c1bf8d132a",
+      "title": "Senior Flutter Developer",
+      "department": "Tech Division",
+      "experienceLevel": "SENIOR",
+      "employmentType": "FULL_TIME",
+      "description": "Looking for an expert Flutter engineer...",
+      "requirements": ["3+ years experience with Flutter", "Familiarity with clean architecture"],
+      "skills": ["Flutter", "Dart", "BLoC", "Git"],
+      "location": "Remote (USA/Canada)",
+      "salaryMin": 90000,
+      "salaryMax": 120000,
+      "currency": "USD",
+      "vacancies": 2,
+      "status": "OPEN",
+      "workspaceId": "790cb3f8-bcac-444c-9c79-f66dc33f9818",
+      "workspaceName": "OZMO innovations",
+      "hideSalaryPublicly": false,
+      "applicantCount": 14,
+      "closingDate": "2026-07-31T00:00:00.000Z",
+      "createdAt": "2026-06-09T15:35:00.000Z",
+      "updatedAt": "2026-06-09T15:35:00.000Z"
+    }
+  ],
+  "timestamp": "2026-06-09T15:35:00.000Z"
+}
+```
+
+```bash
+curl http://localhost:4000/api/v1/careers/jobs?employmentType=FULL_TIME
+```
+
+---
+
+#### Apply for a Job
+
+**`POST /api/v1/careers/jobs/:jobId/apply`** — Auth: Public | Roles: Public (No token required)
+
+Accepts a multipart form-data request.
+
+##### Request Body (Form Data)
+
+| Field | Type | Required | Description |
+| --- | --- | :---: | --- |
+| `firstName` | string | Yes | Applicant's first name |
+| `lastName` | string | Yes | Applicant's last name |
+| `email` | string | Yes | Applicant's email address |
+| `phone` | string | Yes | Applicant's phone number |
+| `currentDesignation` | string | Yes | Current designation |
+| `experienceYears` | number | Yes | Total years of experience |
+| `education` | string | Yes | Highest education degree |
+| `skills` | string/array | Yes | Array or list of skills (comma-separated if string) |
+| `portfolioUrl` | string | No | Portfolio/LinkedIn URL |
+| `coverLetter` | string | No | Optional cover letter text |
+| `resume` | File | No | Upload resume (PDF, DOC, DOCX up to 5MB) |
+
+##### Response — `201 Created`
+
+```json
+{
+  "success": true,
+  "message": "Application submitted successfully",
+  "data": {
+    "id": "cd_29bc38e4-18c7-4ab2-921a-c71b162f48da",
+    "jobId": "jb_f9bc2891-9e23-4ba9-adcd-e7c1bf8d132a",
+    "firstName": "Jane",
+    "lastName": "Doe",
+    "email": "jane.doe@example.com",
+    "phone": "+1234567890",
+    "currentDesignation": "Software Engineer",
+    "experienceYears": 4,
+    "education": "BS in Computer Science",
+    "skills": ["Flutter", "Dart"],
+    "portfolioUrl": "https://linkedin.com/in/janedoe",
+    "coverLetter": "Excited about this opportunity...",
+    "resumeUrl": "uploads/resumes/17812948291_resume.pdf",
+    "stage": "APPLIED",
+    "hasPortalAccess": false,
+    "source": "CAREERS_PORTAL",
+    "appliedAt": "2026-06-10T12:00:00.000Z",
+    "createdAt": "2026-06-10T12:00:00.000Z"
+  },
+  "timestamp": "2026-06-10T12:00:00.000Z"
+}
+```
+
+```bash
+curl -X POST http://localhost:4000/api/v1/careers/jobs/jb_f9bc2891-9e23-4ba9-adcd-e7c1bf8d132a/apply \
+  -F "firstName=Jane" \
+  -F "lastName=Doe" \
+  -F "email=jane.doe@example.com" \
+  -F "phone=+1234567890" \
+  -F "currentDesignation=Software Engineer" \
+  -F "experienceYears=4" \
+  -F "education=BS in Computer Science" \
+  -F "skills=Flutter,Dart" \
+  -F "resume=@/path/to/resume.pdf"
 ```
 
 ---
