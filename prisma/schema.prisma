@@ -105,6 +105,10 @@ model User {
   regularizations         AttendanceRegularization[] @relation("UserRegularizations")
   approvedRegularizations AttendanceRegularization[] @relation("ApprovedByRegularizations")
   documents               EmployeeDocument[]
+  createdChannels      ChatChannel[]            @relation("ChannelCreator")
+  channelMemberships   ChannelMember[]          @relation("ChannelMemberUser")
+  chatMessages         ChatMessage[]            @relation("MessageSender")
+  messageReads         MessageRead[]            @relation("MessageReadUser")
 
   @@index([email])
   @@index([status])
@@ -165,6 +169,7 @@ model Workspace {
   sessions          UserSession[]
   holidays          Holiday[]
   regularizations   AttendanceRegularization[]
+  chatChannels      ChatChannel[]
 
   @@map("workspaces")
 }
@@ -894,4 +899,74 @@ model DocumentUpdateRequest {
   document     EmployeeDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
 
   @@map("document_update_requests")
+}
+
+enum ChannelType {
+  PUBLIC
+  PRIVATE
+}
+
+model ChatChannel {
+  id          String         @id @default(uuid()) @db.Uuid
+  workspaceId String         @map("workspace_id") @db.Uuid
+  channelName String         @map("channel_name") @db.VarChar(100)
+  description String?        @db.Text
+  channelType ChannelType    @default(PUBLIC) @map("channel_type")
+  createdBy   String         @map("created_by") @db.Uuid
+  createdAt   DateTime       @default(now()) @map("created_at")
+  updatedAt   DateTime       @default(now()) @updatedAt @map("updated_at")
+
+  workspace   Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  creator     User           @relation("ChannelCreator", fields: [createdBy], references: [id], onDelete: Cascade)
+  members     ChannelMember[]
+  messages    ChatMessage[]
+
+  @@unique([workspaceId, channelName])
+  @@map("chat_channels")
+}
+
+model ChannelMember {
+  id        String      @id @default(uuid()) @db.Uuid
+  channelId String      @map("channel_id") @db.Uuid
+  userId    String      @map("user_id") @db.Uuid
+  role      String      @default("member") @db.VarChar(50)
+  joinedAt  DateTime    @default(now()) @map("joined_at")
+
+  channel   ChatChannel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  user      User        @relation("ChannelMemberUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([channelId, userId])
+  @@map("channel_members")
+}
+
+model ChatMessage {
+  id          String        @id @default(uuid()) @db.Uuid
+  channelId   String        @map("channel_id") @db.Uuid
+  senderId    String        @map("sender_id") @db.Uuid
+  message     String        @db.Text
+  messageType String        @default("text") @map("message_type") @db.VarChar(50)
+  fileUrl     String?       @map("file_url") @db.Text
+  fileName    String?       @map("file_name") @db.VarChar(255)
+  isEdited    Boolean       @default(false) @map("is_edited")
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @default(now()) @updatedAt @map("updated_at")
+
+  channel     ChatChannel   @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  sender      User          @relation("MessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+  reads       MessageRead[]
+
+  @@map("chat_messages")
+}
+
+model MessageRead {
+  id        String      @id @default(uuid()) @db.Uuid
+  messageId String      @map("message_id") @db.Uuid
+  userId    String      @map("user_id") @db.Uuid
+  readAt    DateTime    @default(now()) @map("read_at")
+
+  message   ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user      User        @relation("MessageReadUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId])
+  @@map("message_reads")
 }
