@@ -54,7 +54,8 @@ export class AttendanceController {
   @Roles(Role.STAFF, Role.TEAM_LEAD, Role.ADMIN, Role.HR)
   async checkInWifi(@CurrentUser() user: RequestUser, @Body() dto: CheckInDto, @Req() req: Request) {
     const clientIp = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || req.ip || '';
-    const data = await this.attendanceService.checkInWifi(user.id, dto, clientIp);
+    const localIps = (req.headers['x-local-ips'] as string) || '';
+    const data = await this.attendanceService.checkInWifi(user.id, dto, clientIp, localIps);
     return { message: 'Check-in recorded via WiFi', data };
   }
 
@@ -63,7 +64,8 @@ export class AttendanceController {
   @Roles(Role.STAFF, Role.TEAM_LEAD, Role.ADMIN, Role.HR)
   async checkOutWifi(@CurrentUser() user: RequestUser, @Body() dto: CheckOutDto, @Req() req: Request) {
     const clientIp = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || req.ip || '';
-    const data = await this.attendanceService.checkOutWifi(user.id, dto, clientIp);
+    const localIps = (req.headers['x-local-ips'] as string) || '';
+    const data = await this.attendanceService.checkOutWifi(user.id, dto, clientIp, localIps);
     return { message: 'Check-out recorded via WiFi', data };
   }
 

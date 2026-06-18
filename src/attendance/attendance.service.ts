@@ -75,7 +75,7 @@ export class AttendanceService {
     };
   }
 
-  async checkIn(userId: string, dto: CheckInDto, clientIp?: string, verificationType?: string) {
+  async checkIn(userId: string, dto: CheckInDto, clientIp?: string, verificationType?: string, localIpsHeader?: string) {
     const user = await this.userRepo.findById(userId);
     if (!user) {
       throw new NotFoundException('User not found');
@@ -93,6 +93,10 @@ export class AttendanceService {
         const allowedIps = workspace.allowedWifiIp.split(',').map((ip) => ip.trim());
         const cleanIp = clientIp ? clientIp.replace(/^::ffff:/, '') : '';
         const clientIps = cleanIp.split(',').map((ip) => ip.trim()).filter(Boolean);
+        if (localIpsHeader) {
+          const parsedLocalIps = localIpsHeader.split(',').map((ip) => ip.trim()).filter(Boolean);
+          clientIps.push(...parsedLocalIps);
+        }
         const isAllowed = allowedIps.some((allowedIp) => {
           if (allowedIp === '*') {
             return true;
@@ -203,7 +207,7 @@ export class AttendanceService {
     });
   }
 
-  async checkOut(userId: string, dto: CheckOutDto, clientIp?: string, verificationType?: string) {
+  async checkOut(userId: string, dto: CheckOutDto, clientIp?: string, verificationType?: string, localIpsHeader?: string) {
     const checkOutTime = dto.checkOutTime ? new Date(dto.checkOutTime) : new Date();
 
     return await this.prisma.$transaction(async (tx) => {
@@ -221,6 +225,10 @@ export class AttendanceService {
           const allowedIps = workspace.allowedWifiIp.split(',').map((ip) => ip.trim());
           const cleanIp = clientIp ? clientIp.replace(/^::ffff:/, '') : '';
           const clientIps = cleanIp.split(',').map((ip) => ip.trim()).filter(Boolean);
+          if (localIpsHeader) {
+            const parsedLocalIps = localIpsHeader.split(',').map((ip) => ip.trim()).filter(Boolean);
+            clientIps.push(...parsedLocalIps);
+          }
           const isAllowed = allowedIps.some((allowedIp) => {
             if (allowedIp === '*') {
               return true;
@@ -331,12 +339,12 @@ export class AttendanceService {
     });
   }
 
-  async checkInWifi(userId: string, dto: CheckInDto, clientIp: string) {
-    return this.checkIn(userId, dto, clientIp, 'WIFI');
+  async checkInWifi(userId: string, dto: CheckInDto, clientIp: string, localIps?: string) {
+    return this.checkIn(userId, dto, clientIp, 'WIFI', localIps);
   }
 
-  async checkOutWifi(userId: string, dto: CheckOutDto, clientIp: string) {
-    return this.checkOut(userId, dto, clientIp, 'WIFI');
+  async checkOutWifi(userId: string, dto: CheckOutDto, clientIp: string, localIps?: string) {
+    return this.checkOut(userId, dto, clientIp, 'WIFI', localIps);
   }
 
   private _calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
