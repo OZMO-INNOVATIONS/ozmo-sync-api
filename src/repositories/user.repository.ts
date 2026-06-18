@@ -291,19 +291,22 @@ export class UserRepository {
     }
   }
 
-  async saveRefreshToken(id: string, token: string | null): Promise<void> {
+  async saveRefreshToken(id: string, token: string | null, expiresAt?: Date): Promise<void> {
     if (token) {
-      const expiresAt = new Date();
-      expiresAt.setDate(expiresAt.getDate() + 7);
+      const finalExpiresAt = expiresAt || (() => {
+        const d = new Date();
+        d.setDate(d.getDate() + 7);
+        return d;
+      })();
       await this.prisma.refreshToken.upsert({
         where: { token },
         create: {
           userId: id,
           token,
-          expiresAt,
+          expiresAt: finalExpiresAt,
         },
         update: {
-          expiresAt,
+          expiresAt: finalExpiresAt,
           isRevoked: false,
         },
       });

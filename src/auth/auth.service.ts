@@ -475,17 +475,38 @@ export class AuthService {
 
     const accessToken = this.jwtService.sign(jwtPayload);
 
+    const refreshExpires = this.configService.get<string>('JWT_REFRESH_EXPIRES', '7d');
+    const refreshSignOptions: any = { algorithm: 'HS256' };
+    if (refreshExpires && refreshExpires !== 'never') {
+      refreshSignOptions.expiresIn = refreshExpires;
+    }
+
     const refreshToken = jwt.sign(
       { sub: user.id },
       this.configService.get<string>('JWT_REFRESH_SECRET') || 'dev-jwt-refresh-secret-key-do-not-use-in-production-123456789',
-      {
-        expiresIn: this.configService.get('JWT_REFRESH_EXPIRES', '7d') as any,
-        algorithm: 'HS256',
-      },
+      refreshSignOptions,
     );
 
+    // Calculate DB expiresAt
+    const dbExpiresAt = new Date();
+    if (refreshExpires === 'never') {
+      dbExpiresAt.setFullYear(dbExpiresAt.getFullYear() + 100);
+    } else {
+      const match = refreshExpires.match(/^(\d+)([smhd])$/);
+      if (match) {
+        const value = parseInt(match[1], 10);
+        const unit = match[2];
+        if (unit === 's') dbExpiresAt.setSeconds(dbExpiresAt.getSeconds() + value);
+        else if (unit === 'm') dbExpiresAt.setMinutes(dbExpiresAt.getMinutes() + value);
+        else if (unit === 'h') dbExpiresAt.setHours(dbExpiresAt.getHours() + value);
+        else if (unit === 'd') dbExpiresAt.setDate(dbExpiresAt.getDate() + value);
+      } else {
+        dbExpiresAt.setDate(dbExpiresAt.getDate() + 7);
+      }
+    }
+
     // Save token in DB relation
-    await this.userRepo.saveRefreshToken(user.id, refreshToken);
+    await this.userRepo.saveRefreshToken(user.id, refreshToken, dbExpiresAt);
 
     return { accessToken, refreshToken };
   }

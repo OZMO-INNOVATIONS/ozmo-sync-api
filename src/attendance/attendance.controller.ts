@@ -111,7 +111,7 @@ export class AttendanceController {
     return { message: 'Attendance status fetched', data };
   }
 
-  @Get('history')
+  @Get(['my', 'history'])
   async getMyAttendance(
     @CurrentUser() user: RequestUser,
     @Query() query: AttendanceQueryDto,
@@ -178,7 +178,57 @@ export class AttendanceController {
     return { message: 'Regularization request submitted successfully', data };
   }
 
-  @Get('regularizations')
+  // ── Correction alias endpoints (frontend-facing) ──────────────────────────
+  // Maps frontend /attendance/correction payload to the regularize logic.
+
+  @Post('correction')
+  @HttpCode(HttpStatus.CREATED)
+  @Roles(Role.STAFF, Role.TEAM_LEAD, Role.ADMIN, Role.HR)
+  async submitCorrection(
+    @CurrentUser() user: RequestUser,
+    @Body() body: {
+      date: string;
+      checkInTime?: string;
+      checkOutTime?: string;
+      requestedCheckIn?: string;
+      requestedCheckOut?: string;
+      reason: string;
+    },
+  ) {
+    // Resolve check-in/out from either camelCase or requestedXxx forms
+    const checkIn = body.checkInTime || body.requestedCheckIn;
+    const checkOut = body.checkOutTime || body.requestedCheckOut;
+
+    // Normalise time-only strings ("09:00:00") to full ISO datetime using the given date
+    const normalise = (timeOrIso?: string): string | undefined => {
+      if (!timeOrIso) return undefined;
+      // Already a full ISO string
+      if (timeOrIso.includes('T') || timeOrIso.includes('-')) return timeOrIso;
+      // Time-only: combine with date
+      return `${body.date}T${timeOrIso}Z`;
+    };
+
+    const normCheckIn = normalise(checkIn);
+    const normCheckOut = normalise(checkOut);
+
+    let type: 'CHECK_IN' | 'CHECK_OUT' | 'BOTH';
+    if (normCheckIn && normCheckOut) type = 'BOTH';
+    else if (normCheckIn) type = 'CHECK_IN';
+    else type = 'CHECK_OUT';
+
+    const dto: RegularizeAttendanceDto = {
+      date: body.date,
+      type,
+      checkIn: normCheckIn,
+      checkOut: normCheckOut,
+      reason: body.reason,
+    };
+
+    const data = await this.attendanceService.submitRegularization(user.id, dto);
+    return { message: 'Correction request submitted', data };
+  }
+
+  @Get(['regularizations', 'corrections'])
   @Roles(Role.STAFF, Role.TEAM_LEAD, Role.ADMIN, Role.HR)
   async listRegularizations(
     @CurrentUser() user: RequestUser,
