@@ -56,6 +56,34 @@ Enterprise-grade Staff Management & Attendance Tracking REST API built with **Ne
     - [Fetch All Leaves](#fetch-all-leaves)
     - [Submit Leave Request](#submit-leave-request)
     - [Update Leave Status](#update-leave-status)
+  - [Document Management](#document-management)
+    - [Admin: Get All Documents](#admin-get-all-documents)
+    - [Admin: Get Update Requests](#admin-get-update-requests)
+    - [Admin: Approve Document](#admin-approve-document)
+    - [Admin: Reject Document](#admin-reject-document)
+    - [Admin: Request Reupload](#admin-request-reupload)
+    - [Admin: Approve Update Request](#admin-approve-update-request)
+    - [Admin: Reject Update Request](#admin-reject-update-request)
+    - [Employee: Upload Document](#employee-upload-document)
+    - [Employee: Get My Documents](#employee-get-my-documents)
+    - [Employee: Submit Update Request](#employee-submit-update-request)
+    - [Employee: Get My Update Requests](#employee-get-my-update-requests)
+  - [Chat & Collaboration](#chat--collaboration)
+    - [Create Channel](#create-channel)
+    - [Get Channels](#get-channels)
+    - [Get Channel Details](#get-channel-details)
+    - [Update Channel](#update-channel)
+    - [Delete Channel](#delete-channel)
+    - [Add Channel Members](#add-channel-members)
+    - [Remove Channel Member](#remove-channel-member)
+    - [Send Message](#send-message)
+    - [Update Message](#update-message)
+    - [Delete Message](#delete-message)
+    - [Get Channel Messages](#get-channel-messages)
+    - [Mark Message as Read](#mark-message-as-read)
+    - [Get Unread Message Count](#get-unread-message-count)
+    - [Search Messages](#search-messages)
+    - [Get Chat Notifications](#get-chat-notifications)
 - [Error Responses](#error-responses)
 - [HTTP Status Codes](#http-status-codes)
 
@@ -313,6 +341,32 @@ To ensure consistent and readable time presentation across clients (such as mobi
 | `POST`   | `/invitations/:token/revoke`    | JWT + Roles | `ADMIN` `SUPER_ADMIN`              |
 | `GET`    | `/dashboard/admin`              | JWT + Roles | `ADMIN` `SUPER_ADMIN` `HR` `TEAM_LEAD` |
 | `GET`    | `/dashboard/staff`              | JWT         | Any                                |
+| `GET`    | `/admin/documents`              | JWT + Roles | `ADMIN` `HR`                       |
+| `GET`    | `/admin/document/update-requests` | JWT + Roles | `ADMIN` `HR`                     |
+| `POST`   | `/admin/document/approve`       | JWT + Roles | `ADMIN` `HR`                       |
+| `POST`   | `/admin/document/reject`        | JWT + Roles | `ADMIN` `HR`                       |
+| `POST`   | `/admin/document/reupload-request` | JWT + Roles | `ADMIN` `HR`                    |
+| `POST`   | `/admin/document/update/approve` | JWT + Roles | `ADMIN` `HR`                       |
+| `POST`   | `/admin/document/update/reject`  | JWT + Roles | `ADMIN` `HR`                       |
+| `POST`   | `/employee/document/upload`     | JWT + Roles | Any (Workspace roles)              |
+| `GET`    | `/employee/documents`           | JWT + Roles | Any (Workspace roles)              |
+| `POST`   | `/employee/document/update-request` | JWT + Roles | Any (Workspace roles)          |
+| `GET`    | `/employee/document/update-status` | JWT + Roles | Any (Workspace roles)           |
+| `POST`   | `/chat/channels`                | JWT         | Any                                |
+| `GET`    | `/chat/channels`                | JWT         | Any                                |
+| `GET`    | `/chat/channels/:channelId`      | JWT         | Any                                |
+| `PATCH`  | `/chat/channels/:channelId`      | JWT         | Any                                |
+| `DELETE` | `/chat/channels/:channelId`      | JWT         | Any                                |
+| `POST`   | `/chat/channels/:channelId/members` | JWT      | Any                                |
+| `DELETE` | `/chat/channels/:channelId/members/:targetUserId` | JWT | Any                       |
+| `POST`   | `/chat/messages`                | JWT         | Any                                |
+| `PATCH`  | `/chat/messages/:messageId`      | JWT         | Any                                |
+| `DELETE` | `/chat/messages/:messageId`      | JWT         | Any                                |
+| `GET`    | `/chat/channels/:channelId/messages` | JWT     | Any                                |
+| `POST`   | `/chat/messages/:messageId/read` | JWT         | Any                                |
+| `GET`    | `/chat/unread`                  | JWT         | Any                                |
+| `GET`    | `/chat/search`                  | JWT         | Any                                |
+| `GET`    | `/chat/notifications`           | JWT         | Any                                |
 
 ---
 
@@ -2315,6 +2369,883 @@ curl -X POST http://localhost:4000/api/v1/careers/jobs/jb_f9bc2891-9e23-4ba9-adc
   -F "education=BS in Computer Science" \
   -F "skills=Flutter,Dart" \
   -F "resume=@/path/to/resume.pdf"
+```
+
+### Document Management
+
+This module allows employees to upload and manage their documents (e.g. ID proof, address proof, certificates), and allows administrators/HR to review, approve, reject, or request updates/re-uploads.
+
+#### Admin: Get All Documents
+
+Retrieve all documents uploaded by staff in the administrator's workspace.
+
+**`GET /api/v1/admin/documents`** — Auth: Bearer token | Roles: `ADMIN`, `HR`
+
+##### Response — `200 OK`
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "doc_123",
+      "userId": "usr_456",
+      "name": "Passport",
+      "documentType": "PASSPORT",
+      "fileUrl": "https://storage.googleapis.com/bucket/passport.pdf",
+      "status": "PENDING",
+      "remarks": null,
+      "expiryDate": "2031-12-31T00:00:00.000Z",
+      "createdAt": "2026-06-15T10:00:00.000Z"
+    }
+  ]
+}
+```
+
+##### Command
+```bash
+curl http://localhost:4000/api/v1/admin/documents \
+  -H "Authorization: Bearer <ACCESS_TOKEN>"
+```
+
+---
+
+#### Admin: Get Update Requests
+
+Retrieve all pending document update requests in the workspace.
+
+**`GET /api/v1/admin/document/update-requests`** — Auth: Bearer token | Roles: `ADMIN`, `HR`
+
+##### Response — `200 OK`
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "req_789",
+      "documentId": "doc_123",
+      "reason": "Corrected misspelled name and renewed validity",
+      "newFileName": "Passport_Renewed.pdf",
+      "newFileUrl": "https://storage.googleapis.com/bucket/passport_renewed.pdf",
+      "status": "PENDING",
+      "createdAt": "2026-06-16T12:00:00.000Z"
+    }
+  ]
+}
+```
+
+##### Command
+```bash
+curl http://localhost:4000/api/v1/admin/document/update-requests \
+  -H "Authorization: Bearer <ACCESS_TOKEN>"
+```
+
+---
+
+#### Admin: Approve Document
+
+Approve an uploaded document.
+
+**`POST /api/v1/admin/document/approve`** — Auth: Bearer token | Roles: `ADMIN`, `HR`
+
+##### Request Body
+
+| Field | Type | Required | Description |
+| --- | --- | :---: | --- |
+| `documentId` | string (UUID) | Yes | The ID of the document to approve |
+| `remarks` | string | No | Optional remarks or notes |
+
+```json
+{
+  "documentId": "doc_123",
+  "remarks": "Document details verified"
+}
+```
+
+##### Response — `200 OK`
+
+```json
+{
+  "success": true,
+  "message": "Document approved successfully",
+  "data": {
+    "id": "doc_123",
+    "status": "APPROVED",
+    "remarks": "Document details verified"
+  }
+}
+```
+
+##### Command
+```bash
+curl -X POST http://localhost:4000/api/v1/admin/document/approve \
+  -H "Authorization: Bearer <ACCESS_TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{"documentId":"doc_123","remarks":"Document details verified"}'
+```
+
+---
+
+#### Admin: Reject Document
+
+Reject an uploaded document.
+
+**`POST /api/v1/admin/document/reject`** — Auth: Bearer token | Roles: `ADMIN`, `HR`
+
+##### Request Body
+
+| Field | Type | Required | Description |
+| --- | --- | :---: | --- |
+| `documentId` | string (UUID) | Yes | The ID of the document to reject |
+| `remarks` | string | Yes | Reason for rejection |
+
+```json
+{
+  "documentId": "doc_123",
+  "remarks": "Image blurry and illegible. Please upload a high-resolution scan."
+}
+```
+
+##### Response — `200 OK`
+
+```json
+{
+  "success": true,
+  "message": "Document rejected successfully",
+  "data": {
+    "id": "doc_123",
+    "status": "REJECTED",
+    "remarks": "Image blurry and illegible. Please upload a high-resolution scan."
+  }
+}
+```
+
+##### Command
+```bash
+curl -X POST http://localhost:4000/api/v1/admin/document/reject \
+  -H "Authorization: Bearer <ACCESS_TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{"documentId":"doc_123","remarks":"Image blurry"}'
+```
+
+---
+
+#### Admin: Request Reupload
+
+Flag a document for re-upload.
+
+**`POST /api/v1/admin/document/reupload-request`** — Auth: Bearer token | Roles: `ADMIN`, `HR`
+
+##### Request Body
+
+| Field | Type | Required | Description |
+| --- | --- | :---: | --- |
+| `documentId` | string (UUID) | Yes | Document ID |
+| `remarks` | string | Yes | Instructions for what to upload |
+
+```json
+{
+  "documentId": "doc_123",
+  "remarks": "Please provide the back side of the card as well."
+}
+```
+
+##### Response — `200 OK`
+
+```json
+{
+  "success": true,
+  "message": "Re-upload request sent successfully",
+  "data": {
+    "id": "doc_123",
+    "status": "REUPLOAD_REQUESTED",
+    "remarks": "Please provide the back side of the card as well."
+  }
+}
+```
+
+##### Command
+```bash
+curl -X POST http://localhost:4000/api/v1/admin/document/reupload-request \
+  -H "Authorization: Bearer <ACCESS_TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{"documentId":"doc_123","remarks":"Please provide the back side"}'
+```
+
+---
+
+#### Admin: Approve Update Request
+
+Approve an employee's requested document update. This will automatically overwrite the document's properties with the newly submitted values.
+
+**`POST /api/v1/admin/document/update/approve`** — Auth: Bearer token | Roles: `ADMIN`, `HR`
+
+##### Request Body
+
+| Field | Type | Required | Description |
+| --- | --- | :---: | --- |
+| `updateRequestId` | string (UUID) | Yes | ID of the update request |
+| `remarks` | string | No | Optional remarks |
+
+```json
+{
+  "updateRequestId": "req_789",
+  "remarks": "Verified changes. Approved."
+}
+```
+
+##### Response — `200 OK`
+
+```json
+{
+  "success": true,
+  "message": "Update request approved successfully",
+  "data": {
+    "id": "doc_123",
+    "name": "Passport_Renewed.pdf",
+    "fileUrl": "https://storage.googleapis.com/bucket/passport_renewed.pdf",
+    "status": "APPROVED"
+  }
+}
+```
+
+##### Command
+```bash
+curl -X POST http://localhost:4000/api/v1/admin/document/update/approve \
+  -H "Authorization: Bearer <ACCESS_TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{"updateRequestId":"req_789"}'
+```
+
+---
+
+#### Admin: Reject Update Request
+
+Reject an employee's requested document update.
+
+**`POST /api/v1/admin/document/update/reject`** — Auth: Bearer token | Roles: `ADMIN`, `HR`
+
+##### Request Body
+
+| Field | Type | Required | Description |
+| --- | --- | :---: | --- |
+| `updateRequestId` | string (UUID) | Yes | ID of the update request |
+| `remarks` | string | Yes | Reason for rejection |
+
+```json
+{
+  "updateRequestId": "req_789",
+  "remarks": "Incorrect document format uploaded."
+}
+```
+
+##### Response — `200 OK`
+
+```json
+{
+  "success": true,
+  "message": "Update request rejected successfully",
+  "data": {
+    "id": "req_789",
+    "status": "REJECTED",
+    "remarks": "Incorrect document format uploaded."
+  }
+}
+```
+
+##### Command
+```bash
+curl -X POST http://localhost:4000/api/v1/admin/document/update/reject \
+  -H "Authorization: Bearer <ACCESS_TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{"updateRequestId":"req_789","remarks":"Incorrect document format"}'
+```
+
+---
+
+#### Employee: Upload Document
+
+Upload a new document for review.
+
+**`POST /api/v1/employee/document/upload`** — Auth: Bearer token | Roles: `STAFF`, `TEAM_LEAD`, `ADMIN`, `HR`
+
+##### Request Body
+
+| Field | Type | Required | Description |
+| --- | --- | :---: | --- |
+| `documentType` | string | Yes | E.g. `PASSPORT`, `DRIVING_LICENSE`, `NATIONAL_ID`, `VISA` |
+| `name` | string | Yes | Display name of the document |
+| `fileUrl` | string | Yes | Remote url/path to the uploaded file |
+| `expiryDate` | string | No | Optional ISO 8601 expiry date string |
+
+```json
+{
+  "documentType": "NATIONAL_ID",
+  "name": "Identity Card",
+  "fileUrl": "https://storage.googleapis.com/bucket/my_national_id.pdf",
+  "expiryDate": "2030-01-01T00:00:00.000Z"
+}
+```
+
+##### Response — `201 Created`
+
+```json
+{
+  "success": true,
+  "message": "Document uploaded successfully",
+  "data": {
+    "id": "doc_123",
+    "userId": "usr_456",
+    "name": "Identity Card",
+    "documentType": "NATIONAL_ID",
+    "fileUrl": "https://storage.googleapis.com/bucket/my_national_id.pdf",
+    "status": "PENDING",
+    "expiryDate": "2030-01-01T00:00:00.000Z",
+    "createdAt": "2026-06-16T13:00:00.000Z"
+  }
+}
+```
+
+##### Command
+```bash
+curl -X POST http://localhost:4000/api/v1/employee/document/upload \
+  -H "Authorization: Bearer <ACCESS_TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{"documentType":"NATIONAL_ID","name":"Identity Card","fileUrl":"https://storage.googleapis.com/bucket/my_national_id.pdf"}'
+```
+
+---
+
+#### Employee: Get My Documents
+
+Retrieve all documents uploaded by the authenticated user.
+
+**`GET /api/v1/employee/documents`** — Auth: Bearer token | Roles: `STAFF`, `TEAM_LEAD`, `ADMIN`, `HR`
+
+##### Response — `200 OK`
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "doc_123",
+      "name": "Identity Card",
+      "documentType": "NATIONAL_ID",
+      "fileUrl": "https://storage.googleapis.com/bucket/my_national_id.pdf",
+      "status": "PENDING",
+      "expiryDate": "2030-01-01T00:00:00.000Z",
+      "createdAt": "2026-06-16T13:00:00.000Z"
+    }
+  ]
+}
+```
+
+##### Command
+```bash
+curl http://localhost:4000/api/v1/employee/documents \
+  -H "Authorization: Bearer <ACCESS_TOKEN>"
+```
+
+---
+
+#### Employee: Submit Update Request
+
+Submit a request to update an existing approved/rejected document with a new file.
+
+**`POST /api/v1/employee/document/update-request`** — Auth: Bearer token | Roles: `STAFF`, `TEAM_LEAD`, `ADMIN`, `HR`
+
+##### Request Body
+
+| Field | Type | Required | Description |
+| --- | --- | :---: | --- |
+| `documentId` | string (UUID) | Yes | Target document ID |
+| `reason` | string | Yes | Reason for requesting the update |
+| `newFileName` | string | Yes | Display name for the replacement file |
+| `newFileUrl` | string | Yes | Remote url/path to the replacement file |
+
+```json
+{
+  "documentId": "doc_123",
+  "reason": "Renewed the ID card with correct spelling",
+  "newFileName": "Identity Card Renewed",
+  "newFileUrl": "https://storage.googleapis.com/bucket/my_national_id_new.pdf"
+}
+```
+
+##### Response — `201 Created`
+
+```json
+{
+  "success": true,
+  "message": "Update request submitted successfully",
+  "data": {
+    "id": "req_789",
+    "documentId": "doc_123",
+    "reason": "Renewed the ID card with correct spelling",
+    "newFileName": "Identity Card Renewed",
+    "newFileUrl": "https://storage.googleapis.com/bucket/my_national_id_new.pdf",
+    "status": "PENDING",
+    "createdAt": "2026-06-16T13:30:00.000Z"
+  }
+}
+```
+
+##### Command
+```bash
+curl -X POST http://localhost:4000/api/v1/employee/document/update-request \
+  -H "Authorization: Bearer <ACCESS_TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{"documentId":"doc_123","reason":"Renewed card","newFileName":"Identity Card Renewed","newFileUrl":"https://storage.googleapis.com/bucket/my_national_id_new.pdf"}'
+```
+
+---
+
+#### Employee: Get My Update Requests
+
+Retrieve the status of all document update requests made by the authenticated user.
+
+**`GET /api/v1/employee/document/update-status`** — Auth: Bearer token | Roles: `STAFF`, `TEAM_LEAD`, `ADMIN`, `HR`
+
+##### Response — `200 OK`
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "req_789",
+      "documentId": "doc_123",
+      "reason": "Renewed the ID card with correct spelling",
+      "newFileName": "Identity Card Renewed",
+      "status": "PENDING",
+      "remarks": null,
+      "createdAt": "2026-06-16T13:30:00.000Z"
+    }
+  ]
+}
+```
+
+##### Command
+```bash
+curl http://localhost:4000/api/v1/employee/document/update-status \
+  -H "Authorization: Bearer <ACCESS_TOKEN>"
+```
+
+---
+
+### Chat & Collaboration
+
+Real-time message broadcasting and conversation channels for workgroups. Note that client connections are established via WebSockets/Socket.io (`/chat` namespace) while core state changes, historical pagination, and queries occur via REST endpoints.
+
+#### Create Channel
+
+**`POST /api/v1/chat/channels`** — Auth: Bearer token | Roles: Any
+
+##### Request Body
+
+| Field | Type | Required | Description |
+| --- | --- | :---: | --- |
+| `channelName` | string | Yes | Name of the channel |
+| `description` | string | No | Optional description |
+| `channelType` | enum | Yes | `PUBLIC`, `PRIVATE`, `DIRECT` |
+| `memberIds` | array of strings (UUID) | No | Initial member IDs to add |
+
+```json
+{
+  "channelName": "Tech Talk",
+  "description": "General discussions about technical stacks and frameworks",
+  "channelType": "PUBLIC",
+  "memberIds": ["usr_111", "usr_222"]
+}
+```
+
+##### Response — `201 Created`
+
+```json
+{
+  "message": "Channel created successfully",
+  "data": {
+    "id": "chan_001",
+    "channelName": "Tech Talk",
+    "description": "General discussions about technical stacks and frameworks",
+    "channelType": "PUBLIC",
+    "workspaceId": "ws_123",
+    "createdById": "usr_456",
+    "createdAt": "2026-06-16T14:00:00.000Z"
+  }
+}
+```
+
+##### Command
+```bash
+curl -X POST http://localhost:4000/api/v1/chat/channels \
+  -H "Authorization: Bearer <ACCESS_TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{"channelName":"Tech Talk","channelType":"PUBLIC"}'
+```
+
+---
+
+#### Get Channels
+
+Retrieve all channels the user is a member of within the current workspace.
+
+**`GET /api/v1/chat/channels`** — Auth: Bearer token | Roles: Any
+
+##### Response — `200 OK`
+
+```json
+{
+  "message": "Channels retrieved successfully",
+  "data": [
+    {
+      "id": "chan_001",
+      "channelName": "Tech Talk",
+      "channelType": "PUBLIC",
+      "workspaceId": "ws_123"
+    }
+  ]
+}
+```
+
+---
+
+#### Get Channel Details
+
+**`GET /api/v1/chat/channels/:channelId`** — Auth: Bearer token | Roles: Any
+
+##### Response — `200 OK`
+
+```json
+{
+  "message": "Channel details retrieved successfully",
+  "data": {
+    "id": "chan_001",
+    "channelName": "Tech Talk",
+    "description": "General discussions about technical stacks and frameworks",
+    "channelType": "PUBLIC",
+    "members": [
+      {
+        "userId": "usr_111",
+        "user": { "firstName": "Alice", "lastName": "Smith", "email": "alice@company.com" }
+      }
+    ]
+  }
+}
+```
+
+---
+
+#### Update Channel
+
+**`PATCH /api/v1/chat/channels/:channelId`** — Auth: Bearer token | Roles: Any
+
+##### Request Body (all optional)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `channelName` | string | New channel name |
+| `description` | string | New description |
+| `channelType` | enum | `PUBLIC`, `PRIVATE`, `DIRECT` |
+
+```json
+{
+  "channelName": "Tech Support",
+  "description": "Help channel for engineering infrastructure issues"
+}
+```
+
+##### Response — `200 OK`
+
+```json
+{
+  "message": "Channel updated successfully",
+  "data": {
+    "id": "chan_001",
+    "channelName": "Tech Support",
+    "description": "Help channel for engineering infrastructure issues"
+  }
+}
+```
+
+---
+
+#### Delete Channel
+
+**`DELETE /api/v1/chat/channels/:channelId`** — Auth: Bearer token | Roles: Any
+
+##### Response — `200 OK`
+
+```json
+{
+  "success": true,
+  "message": "Channel deleted successfully"
+}
+```
+
+---
+
+#### Add Channel Members
+
+**`POST /api/v1/chat/channels/:channelId/members`** — Auth: Bearer token | Roles: Any
+
+##### Request Body
+
+| Field | Type | Required | Description |
+| --- | --- | :---: | --- |
+| `memberIds` | array of strings (UUID) | Yes | User IDs to add to the channel |
+
+```json
+{
+  "memberIds": ["usr_333", "usr_444"]
+}
+```
+
+##### Response — `200 OK`
+
+```json
+{
+  "message": "Members added successfully",
+  "data": {
+    "count": 2
+  }
+}
+```
+
+---
+
+#### Remove Channel Member
+
+**`DELETE /api/v1/chat/channels/:channelId/members/:targetUserId`** — Auth: Bearer token | Roles: Any
+
+##### Response — `200 OK`
+
+```json
+{
+  "message": "Member removed successfully"
+}
+```
+
+---
+
+#### Send Message
+
+Publish a message to a channel. This records it in the DB and broadcasts it via WebSocket.
+
+**`POST /api/v1/chat/messages`** — Auth: Bearer token | Roles: Any
+
+##### Request Body
+
+| Field | Type | Required | Description |
+| --- | --- | :---: | --- |
+| `channelId` | string (UUID) | Yes | Recipient channel ID |
+| `message` | string | Yes | Text content of the message |
+| `messageType` | string | No | Defaults to `TEXT` (e.g. `TEXT`, `FILE`, `IMAGE`) |
+| `fileUrl` | string | No | Optional attachment url |
+| `fileName` | string | No | Optional attachment filename |
+
+```json
+{
+  "channelId": "chan_001",
+  "message": "Hello team, let's review the new design files.",
+  "messageType": "TEXT"
+}
+```
+
+##### Response — `201 Created`
+
+```json
+{
+  "message": "Message sent successfully",
+  "data": {
+    "id": "msg_001",
+    "channelId": "chan_001",
+    "senderId": "usr_111",
+    "message": "Hello team, let's review the new design files.",
+    "messageType": "TEXT",
+    "fileUrl": null,
+    "fileName": null,
+    "createdAt": "2026-06-16T14:15:00.000Z"
+  }
+}
+```
+
+---
+
+#### Update Message
+
+**`PATCH /api/v1/chat/messages/:messageId`** — Auth: Bearer token | Roles: Any
+
+##### Request Body
+
+```json
+{
+  "message": "Hello team, let's review the new design files. (Updated)"
+}
+```
+
+##### Response — `200 OK`
+
+```json
+{
+  "message": "Message updated successfully",
+  "data": {
+    "id": "msg_001",
+    "message": "Hello team, let's review the new design files. (Updated)",
+    "updatedAt": "2026-06-16T14:16:00.000Z"
+  }
+}
+```
+
+---
+
+#### Delete Message
+
+**`DELETE /api/v1/chat/messages/:messageId`** — Auth: Bearer token | Roles: Any
+
+##### Response — `200 OK`
+
+```json
+{
+  "success": true,
+  "message": "Message deleted successfully"
+}
+```
+
+---
+
+#### Get Channel Messages
+
+Fetch conversation history inside a channel. Supports pagination.
+
+**`GET /api/v1/chat/channels/:channelId/messages`** — Auth: Bearer token | Roles: Any
+
+##### Query Parameters
+
+| Field | Type | Default | Description |
+| --- | --- | :---: | --- |
+| `page` | number | `1` | Page offset |
+| `limit` | number | `50` | Page limit (max 100) |
+
+##### Response — `200 OK`
+
+```json
+{
+  "message": "Messages retrieved successfully",
+  "data": {
+    "messages": [
+      {
+        "id": "msg_001",
+        "channelId": "chan_001",
+        "senderId": "usr_111",
+        "message": "Hello team",
+        "createdAt": "2026-06-16T14:15:00.000Z",
+        "sender": { "firstName": "Alice", "lastName": "Smith" }
+      }
+    ],
+    "pagination": {
+      "page": 1,
+      "limit": 50,
+      "total": 1
+    }
+  }
+}
+```
+
+---
+
+#### Mark Message as Read
+
+Confirm that a user has viewed a specific message.
+
+**`POST /api/v1/chat/messages/:messageId/read`** — Auth: Bearer token | Roles: Any
+
+##### Response — `200 OK`
+
+```json
+{
+  "message": "Message marked as read",
+  "data": {
+    "success": true
+  }
+}
+```
+
+---
+
+#### Get Unread Message Count
+
+Retrieve the count of unread messages across all channels for the user in the current workspace context.
+
+**`GET /api/v1/chat/unread`** — Auth: Bearer token | Roles: Any
+
+##### Response — `200 OK`
+
+```json
+{
+  "message": "Unread count retrieved successfully",
+  "data": {
+    "unreadCount": 12
+  }
+}
+```
+
+---
+
+#### Search Messages
+
+Search conversational logs for keywords.
+
+**`GET /api/v1/chat/search`** — Auth: Bearer token | Roles: Any
+
+##### Query Parameters
+
+| Field | Type | Required | Description |
+| --- | --- | :---: | --- |
+| `query` | string | Yes | Text segment to look for |
+| `filter` | string | No | Optional category / channel ID filter |
+
+##### Response — `200 OK`
+
+```json
+{
+  "message": "Search results retrieved successfully",
+  "data": [
+    {
+      "id": "msg_001",
+      "channelId": "chan_001",
+      "message": "Found the design review files",
+      "createdAt": "2026-06-16T14:15:00.000Z",
+      "channel": { "channelName": "Tech Talk" }
+    }
+  ]
+}
+```
+
+---
+
+#### Get Chat Notifications
+
+Retrieve recent chat-related push and email notification templates generated for the user.
+
+**`GET /api/v1/chat/notifications`** — Auth: Bearer token | Roles: Any
+
+##### Response — `200 OK`
+
+```json
+{
+  "message": "Notifications retrieved successfully",
+  "data": [
+    {
+      "id": "notif_001",
+      "title": "New Message from Alice",
+      "body": "Alice: Hello team...",
+      "createdAt": "2026-06-16T14:15:05.000Z"
+    }
+  ]
+}
 ```
 
 ---

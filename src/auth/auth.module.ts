@@ -15,13 +15,18 @@ import { WorkspaceMemberRepository } from '../repositories/workspace-member.repo
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.registerAsync({
       inject: [ConfigService],
-      useFactory: (cfg: ConfigService) => ({
-        secret: cfg.get<string>('JWT_SECRET') || 'dev-jwt-secret-key-do-not-use-in-production-123456789',
-        signOptions: {
-          expiresIn: cfg.get<string>('JWT_EXPIRES_IN', '15m'),
-          algorithm: 'HS256',
-        },
-      }),
+      useFactory: (cfg: ConfigService) => {
+        const secret = cfg.get<string>('JWT_SECRET') || 'dev-jwt-secret-key-do-not-use-in-production-123456789';
+        const expiresIn = cfg.get<string>('JWT_EXPIRES_IN', '15m');
+        const signOptions: any = { algorithm: 'HS256' };
+        if (expiresIn && expiresIn !== 'never') {
+          signOptions.expiresIn = expiresIn;
+        }
+        return {
+          secret,
+          signOptions,
+        };
+      },
     }),
   ],
   controllers: [AuthController],
