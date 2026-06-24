@@ -1,4 +1,4 @@
-import { Injectable, ConflictException, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, ConflictException, NotFoundException, BadRequestException, OnModuleInit } from '@nestjs/common';
 import { AttendanceRepository } from '../repositories/attendance.repository';
 import { UserRepository } from '../repositories/user.repository';
 import { PrismaService } from '../prisma/prisma.service';
@@ -8,6 +8,7 @@ import { GPSCheckInDto, GPSCheckOutDto } from './dto/gps-check-in.dto';
 import { FaceCheckInDto, FaceCheckOutDto } from './dto/face-check-in.dto';
 import { AttendanceQueryDto } from './dto/attendance-query.dto';
 import { RegularizeAttendanceDto, ReviewRegularizationDto } from './dto/regularize-attendance.dto';
+import { AdminOverrideDto } from './dto/admin-override.dto';
 import { formatDate, formatDateTime, formatTime, formatDuration, formatSummaryDuration, getKolkataDate } from '../common/utils/date-format.util';
 import { AuditService } from '../audit/audit.service';
 
@@ -30,13 +31,22 @@ function calculateAttendanceStatus(firstCheckIn: Date | null, totalWorkMinutes: 
 }
 
 @Injectable()
-export class AttendanceService {
+export class AttendanceService implements OnModuleInit {
   constructor(
     private readonly attendanceRepo: AttendanceRepository,
     private readonly userRepo: UserRepository,
     private readonly prisma: PrismaService,
     private readonly auditService: AuditService,
   ) {}
+
+  onModuleInit() {
+    // Run immediately on startup
+    this.autoCheckOutMissedSessions().catch(err => console.error('Initial auto check-out failed:', err));
+    // Run periodically every 15 minutes
+    setInterval(() => {
+      this.autoCheckOutMissedSessions().catch(err => console.error('Periodic auto check-out failed:', err));
+    }, 15 * 60 * 1000);
+  }
 
   private _formatDailySummaryResponse(sessions: any[], summary?: any) {
     const formatTimeFromValue = (val: any) => {
@@ -61,6 +71,8 @@ export class AttendanceService {
       lastCheckOut,
       totalWorkedHours: formatSummaryDuration(totalWorkMinutes),
       totalBreakHours: formatSummaryDuration(totalBreakMinutes),
+      workedMinutes: totalWorkMinutes,
+      breakMinutes: totalBreakMinutes,
       sessions: sessions.map((s) => ({
         checkIn: formatTimeFromValue(s.checkInTime) ?? '',
         checkOut: s.checkOutTime ? (formatTimeFromValue(s.checkOutTime) ?? null) : null,
@@ -75,7 +87,166 @@ export class AttendanceService {
     };
   }
 
+  async autoCheckOutMissedSessions() {
+    try {
+      const today = new Date();
+      const todayKolkataStart = getKolkataDate(today);
+      const todayKolkataStartUTC = new Date(todayKolkataStart.getTime() - 5.5 * 60 * 60 * 1000);
+
+      // Find all active sessions where checkInTime is before todayKolkataStartUTC
+      const missedSessions = await this.prisma.attendanceSession.findMany({
+        where: {
+          status: 'ACTIVE',
+          deletedAt: null,
+          checkInTime: {
+            lt: todayKolkataStartUTC,
+          },
+        },
+        include: {
+          user: true,
+        },
+      });
+
+      for (const session of missedSessions) {
+        try {
+          const checkInKolkata = new Date(session.checkInTime.getTime() + 5.5 * 60 * 60 * 1000);
+          // Auto checkout at 18:00 (6:00 PM) of the same day in Kolkata time:
+          const checkOutKolkata = new Date(Date.UTC(
+            checkInKolkata.getUTCFullYear(),
+            checkInKolkata.getUTCMonth(),
+            checkInKolkata.getUTCDate(),
+            18, // 6:00 PM
+            0,
+            0
+          ));
+          
+          let autoCheckOutTime = new Date(checkOutKolkata.getTime() - 5.5 * 60 * 60 * 1000);
+          if (session.checkInTime.getTime() >= autoCheckOutTime.getTime()) {
+            autoCheckOutTime = new Date(session.checkInTime.getTime() + 9 * 60 * 60 * 1000);
+          }
+
+          const durationMinutes = Math.max(0, Math.round((autoCheckOutTime.getTime() - session.checkInTime.getTime()) / 60000));
+
+          await this.prisma.$transaction(async (tx) => {
+            // 1. Update session to COMPLETED
+            await tx.attendanceSession.update({
+              where: { id: session.id },
+              data: {
+                checkOutTime: autoCheckOutTime,
+                durationMinutes,
+                status: 'COMPLETED',
+                notes: 'System Auto Check-Out (Missed Manual Check-Out)',
+              },
+            });
+
+            // 2. Recalculate daily summary
+            const dateOnly = getKolkataDate(session.checkInTime);
+            const rawSessions = await tx.attendanceSession.findMany({
+              where: {
+                userId: session.userId,
+                checkInTime: {
+                  gte: new Date(dateOnly.getTime() - 5.5 * 60 * 60 * 1000),
+                  lte: new Date(dateOnly.getTime() + 24 * 60 * 60 * 1000 - 1 - 5.5 * 60 * 60 * 1000),
+                },
+              },
+              orderBy: { checkInTime: 'asc' },
+            });
+
+            const firstCheckIn = rawSessions[0].checkInTime;
+            const completedSessions = rawSessions.filter((s) => s.checkOutTime !== null);
+            const lastCheckOut = completedSessions.length > 0
+              ? new Date(Math.max(...completedSessions.map((s) => s.checkOutTime!.getTime())))
+              : null;
+
+            let totalBreakMinutes = 0;
+            for (let i = 1; i < rawSessions.length; i++) {
+              const prev = rawSessions[i - 1];
+              const curr = rawSessions[i];
+              if (prev.checkOutTime) {
+                const gapMs = curr.checkInTime.getTime() - prev.checkOutTime.getTime();
+                if (gapMs > 0) {
+                  totalBreakMinutes += Math.round(gapMs / 60000);
+                }
+              }
+            }
+
+            const totalWorkMinutes = rawSessions.reduce((sum, s) => sum + (s.durationMinutes ?? 0), 0);
+            const status = calculateAttendanceStatus(firstCheckIn, totalWorkMinutes);
+
+            await tx.attendance.upsert({
+              where: {
+                userId_date: {
+                  userId: session.userId,
+                  date: dateOnly,
+                },
+              },
+              create: {
+                workspaceId: session.workspaceId,
+                userId: session.userId,
+                date: dateOnly,
+                checkIn: firstCheckIn,
+                checkOut: lastCheckOut,
+                workedMinutes: totalWorkMinutes,
+                breakMinutes: totalBreakMinutes,
+                status,
+              },
+              update: {
+                checkIn: firstCheckIn,
+                checkOut: lastCheckOut,
+                workedMinutes: totalWorkMinutes,
+                breakMinutes: totalBreakMinutes,
+                status,
+              },
+            });
+
+            // 3. Notify workspace Admin/Super Admin
+            const admins = await tx.workspaceMember.findMany({
+              where: {
+                workspaceId: session.workspaceId,
+                role: {
+                  in: ['ADMIN', 'SUPER_ADMIN'],
+                },
+                status: 'ACTIVE',
+              },
+            });
+
+            const employeeName = `${session.user.firstName} ${session.user.lastName}`.trim();
+            const formattedDate = formatDate(session.checkInTime) || session.checkInTime.toDateString();
+            const formattedTime = formatTime(autoCheckOutTime) || autoCheckOutTime.toTimeString();
+
+            for (const admin of admins) {
+              await tx.notification.create({
+                data: {
+                  workspaceId: session.workspaceId,
+                  userId: admin.userId,
+                  title: 'Missed Check-Out Alert',
+                  message: `${employeeName} missed checkout on ${formattedDate}. The system has automatically checked them out at ${formattedTime}.`,
+                  type: 'ATTENDANCE_MISSED_CHECKOUT',
+                  isRead: false,
+                },
+              });
+            }
+
+            await this.auditService.log({
+              userId: session.userId,
+              workspaceId: session.workspaceId,
+              action: 'AUTO_CHECK_OUT',
+              module: 'ATTENDANCE',
+              newData: { autoCheckOutTime },
+              detail: `System automatically checked out ${employeeName} due to missed manual check-out.`,
+            });
+          });
+        } catch (e) {
+          console.error(`Error auto-checking out session ${session.id}:`, e);
+        }
+      }
+    } catch (err) {
+      console.error('Error in autoCheckOutMissedSessions:', err);
+    }
+  }
+
   async checkIn(userId: string, dto: CheckInDto, clientIp?: string, verificationType?: string, localIpsHeader?: string) {
+    await this.autoCheckOutMissedSessions();
     const user = await this.userRepo.findById(userId);
     if (!user) {
       throw new NotFoundException('User not found');
@@ -208,6 +379,7 @@ export class AttendanceService {
   }
 
   async checkOut(userId: string, dto: CheckOutDto, clientIp?: string, verificationType?: string, localIpsHeader?: string) {
+    await this.autoCheckOutMissedSessions();
     const checkOutTime = dto.checkOutTime ? new Date(dto.checkOutTime) : new Date();
 
     return await this.prisma.$transaction(async (tx) => {
@@ -454,6 +626,7 @@ export class AttendanceService {
   }
 
   async getTodayAttendance(userId: string) {
+    await this.autoCheckOutMissedSessions();
     const now = new Date();
     const dateOnly = getKolkataDate(now);
 
@@ -476,6 +649,7 @@ export class AttendanceService {
   }
 
   async getStatus(userId: string) {
+    await this.autoCheckOutMissedSessions();
     const openSession = await this.attendanceRepo.findOpenSession(userId);
     const user = await this.userRepo.findById(userId);
     let allowedWifiIp: string | null = null;
@@ -820,6 +994,7 @@ export class AttendanceService {
   }
 
   async getDashboard(query: AttendanceQueryDto) {
+    await this.autoCheckOutMissedSessions();
     const { from, to } = this._resolveRange(query);
     const summaries = await this.attendanceRepo.findAllDailySummariesInRange(from, to);
     const rawSessions = await this.attendanceRepo.findAllSessionsInRange(from, to);
@@ -1128,5 +1303,56 @@ export class AttendanceService {
     });
 
     return updated;
+  }
+
+  async overrideAttendance(adminId: string, dto: AdminOverrideDto) {
+    const targetUser = await this.userRepo.findById(dto.employeeId);
+    if (!targetUser) {
+      throw new NotFoundException('Employee not found');
+    }
+    if (!targetUser.workspaceId) {
+      throw new ConflictException('Employee is not associated with any workspace');
+    }
+
+    const date = new Date(dto.date);
+    const checkIn = dto.checkIn ? new Date(dto.checkIn) : null;
+    const checkOut = dto.checkOut ? new Date(dto.checkOut) : null;
+
+    // Calculate workedMinutes
+    let workedMinutes = 0;
+    if (checkIn && checkOut) {
+      workedMinutes = Math.max(0, Math.round((checkOut.getTime() - checkIn.getTime()) / 60000));
+    }
+
+    // Call upsertDailySummary to save to the database
+    const summary = await this.attendanceRepo.upsertDailySummary({
+      workspaceId: targetUser.workspaceId,
+      userId: dto.employeeId,
+      date,
+      checkIn,
+      checkOut,
+      status: dto.status,
+      workedMinutes,
+      breakMinutes: 0,
+      lateMinutes: 0,
+      overtimeMinutes: 0,
+    });
+
+    await this.auditService.log({
+      userId: adminId,
+      workspaceId: targetUser.workspaceId,
+      action: 'ATTENDANCE_OVERRIDE_ADMIN',
+      module: 'ATTENDANCE',
+      newData: {
+        employeeId: dto.employeeId,
+        status: dto.status,
+        date: dto.date,
+        checkIn: dto.checkIn,
+        checkOut: dto.checkOut,
+      },
+      detail: `Admin overridden attendance for user ${dto.employeeId} on ${dto.date} to ${dto.status}`,
+    });
+
+    return summary;
   }
 }

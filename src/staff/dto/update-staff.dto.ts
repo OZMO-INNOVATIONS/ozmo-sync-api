@@ -1,4 +1,4 @@
-import { IsOptional, IsEnum, IsString, IsISO8601 } from 'class-validator';
+import { IsOptional, IsEnum, IsString, IsISO8601, Matches } from 'class-validator';
 import { Role, UserStatus } from '../../common/constants/roles.enum';
 
 export class UpdateStaffDto {
@@ -8,6 +8,7 @@ export class UpdateStaffDto {
 
   @IsOptional()
   @IsString()
+  @Matches(/^\d{10}$/, { message: 'Phone number must be exactly 10 digits' })
   phone?: string;
 
   @IsOptional()

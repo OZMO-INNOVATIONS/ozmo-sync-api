@@ -19,6 +19,7 @@ import { GPSCheckInDto, GPSCheckOutDto } from './dto/gps-check-in.dto';
 import { FaceCheckInDto, FaceCheckOutDto } from './dto/face-check-in.dto';
 import { AttendanceQueryDto } from './dto/attendance-query.dto';
 import { RegularizeAttendanceDto, ReviewRegularizationDto } from './dto/regularize-attendance.dto';
+import { AdminOverrideDto } from './dto/admin-override.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -270,5 +271,16 @@ export class AttendanceController {
       dto.rejectionReason,
     );
     return { message: `Regularization request ${dto.status.toLowerCase()} successfully`, data };
+  }
+
+  @Put('override')
+  @HttpCode(HttpStatus.OK)
+  @Roles(Role.ADMIN, Role.SUPER_ADMIN, Role.HR)
+  async overrideAttendance(
+    @CurrentUser() user: RequestUser,
+    @Body() dto: AdminOverrideDto,
+  ) {
+    const data = await this.attendanceService.overrideAttendance(user.id, dto);
+    return { message: 'Attendance overridden successfully', data };
   }
 }

@@ -6,6 +6,7 @@ import {
   IsOptional,
   IsEnum,
   IsISO8601,
+  Matches,
 } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { Role } from '../../common/constants/roles.enum';
@@ -31,6 +32,7 @@ export class CreateStaffDto {
 
   @IsOptional()
   @IsString()
+  @Matches(/^\d{10}$/, { message: 'Phone number must be exactly 10 digits' })
   phone?: string;
 
   @IsOptional()

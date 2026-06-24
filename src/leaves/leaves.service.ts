@@ -19,14 +19,14 @@ export class LeavesService {
       return this.prisma.leaveRequest.findMany({
         where: { workspaceId, deletedAt: null },
         orderBy: { createdAt: 'desc' },
-        include: { leaveType: true },
+        include: { leaveType: true, user: true },
       });
     }
 
     return this.prisma.leaveRequest.findMany({
       where: { workspaceId, userId, deletedAt: null },
       orderBy: { createdAt: 'desc' },
-      include: { leaveType: true },
+      include: { leaveType: true, user: true },
     });
   }
 

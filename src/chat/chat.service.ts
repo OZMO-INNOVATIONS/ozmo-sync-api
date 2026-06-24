@@ -164,6 +164,20 @@ export class ChatService {
         _count: {
           select: { messages: true },
         },
+        messages: {
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          include: {
+            sender: {
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                profilePhoto: true,
+              },
+            },
+          },
+        },
       },
       orderBy: { channelName: 'asc' },
     });

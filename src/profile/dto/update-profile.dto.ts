@@ -1,4 +1,4 @@
-import { IsString, IsOptional, MinLength, MaxLength, IsEmail, IsEnum } from 'class-validator';
+import { IsString, IsOptional, MinLength, MaxLength, IsEmail, IsEnum, Matches } from 'class-validator';
 import { Role } from '../../common/constants/roles.enum';
 
 export class UpdateProfileDto {
@@ -16,6 +16,7 @@ export class UpdateProfileDto {
 
   @IsOptional()
   @IsString()
+  @Matches(/^\d{10}$/, { message: 'Phone number must be exactly 10 digits' })
   phone?: string;
 
   @IsOptional()
@@ -28,6 +29,7 @@ export class UpdateProfileDto {
 
   @IsOptional()
   @IsString()
+  @Matches(/^\d{10}$/, { message: 'Emergency contact must be exactly 10 digits' })
   emergencyContact?: string;
 
   @IsOptional()
