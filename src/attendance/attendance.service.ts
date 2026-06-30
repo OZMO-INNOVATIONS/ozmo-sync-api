@@ -1327,7 +1327,7 @@ export class AttendanceService implements OnModuleInit {
     // Call upsertDailySummary to save to the database
     const summary = await this.attendanceRepo.upsertDailySummary({
       workspaceId: targetUser.workspaceId,
-      userId: dto.employeeId,
+      userId: targetUser.id,
       date,
       checkIn,
       checkOut,
