@@ -32,7 +32,7 @@ export class CreateStaffDto {
 
   @IsOptional()
   @IsString()
-  @Matches(/^\d{10}$/, { message: 'Phone number must be exactly 10 digits' })
+  @Matches(/^\+?[\d\s\-()]{10,20}$/, { message: 'Phone number must be a valid format (10-20 digits/symbols)' })
   phone?: string;
 
   @IsOptional()

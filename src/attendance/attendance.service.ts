@@ -1305,6 +1305,22 @@ export class AttendanceService implements OnModuleInit {
     return updated;
   }
 
+  async deleteRegularization(id: string, userId: string) {
+    const req = await this.prisma.attendanceRegularization.findUnique({
+      where: { id },
+    });
+    if (!req) throw new NotFoundException('Regularization request not found');
+    if (req.userId !== userId) {
+      throw new BadRequestException('You are not authorized to revoke this request');
+    }
+    if (req.status !== 'PENDING') {
+      throw new BadRequestException('Only pending requests can be revoked');
+    }
+    return await this.prisma.attendanceRegularization.delete({
+      where: { id },
+    });
+  }
+
   async overrideAttendance(adminId: string, dto: AdminOverrideDto) {
     const targetUser = await this.userRepo.findById(dto.employeeId);
     if (!targetUser) {

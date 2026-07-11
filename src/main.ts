@@ -4,6 +4,7 @@ import { ValidationPipe, VersioningType, UnprocessableEntityException } from '@n
 import helmet from 'helmet';
 import * as morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
+import * as express from 'express';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { ResponseTransformInterceptor } from './common/interceptors/response-transform.interceptor';
@@ -11,6 +12,10 @@ import { configuration } from './config/configuration';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  
+  app.use(express.json({ limit: '50mb' }));
+  app.use(express.urlencoded({ limit: '50mb', extended: true }));
+
   const config = configuration();
 
   app.use(helmet());

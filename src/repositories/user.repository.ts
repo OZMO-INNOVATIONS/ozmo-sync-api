@@ -51,7 +51,7 @@ export interface UserEntity {
 
 @Injectable()
 export class UserRepository {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) { }
 
   private mapToEntity(user: any): UserEntity {
     return {
@@ -161,10 +161,16 @@ export class UserRepository {
     const users = await this.prisma.user.findMany({
       where: filterWhere,
       orderBy,
-      skip,
-      take: limit,
     });
-    return users.map((u) => this.mapToEntity(u));
+
+    const sortedUsers = [...users].sort((a, b) => {
+      if (a.role === 'SUPER_ADMIN' && b.role !== 'SUPER_ADMIN') return -1;
+      if (a.role !== 'SUPER_ADMIN' && b.role === 'SUPER_ADMIN') return 1;
+      return 0;
+    });
+
+    const paginatedUsers = sortedUsers.slice(skip, skip + limit);
+    return paginatedUsers.map((u) => this.mapToEntity(u));
   }
 
   async findById(id: string): Promise<UserEntity | null> {

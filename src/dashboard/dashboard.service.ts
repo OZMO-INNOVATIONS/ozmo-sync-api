@@ -22,6 +22,7 @@ export class DashboardService {
     const staffInWorkspace = await this.prisma.user.findMany({
       where: {
         deletedAt: null,
+        role: { not: 'SUPER_ADMIN' },
         memberships: {
           some: {
             workspaceId,
@@ -45,11 +46,19 @@ export class DashboardService {
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
     const newEmployees = staffInWorkspace.filter((u) => new Date(u.createdAt) >= sevenDaysAgo).length;
 
+    const leaveRequests = await this.prisma.leaveRequest.count({
+      where: {
+        workspaceId,
+        status: 'PENDING',
+        deletedAt: null,
+      },
+    });
+
     return {
       totalEmployees,
       presentToday,
       absentToday,
-      leaveRequests: 3,
+      leaveRequests,
       newEmployees: newEmployees || 2,
     };
   }

@@ -3,6 +3,7 @@ import {
   Post,
   Get,
   Put,
+  Delete,
   Body,
   Param,
   Query,
@@ -271,6 +272,17 @@ export class AttendanceController {
       dto.rejectionReason,
     );
     return { message: `Regularization request ${dto.status.toLowerCase()} successfully`, data };
+  }
+
+  @Delete('regularize/:id')
+  @HttpCode(HttpStatus.OK)
+  @Roles(Role.STAFF, Role.TEAM_LEAD, Role.ADMIN, Role.HR)
+  async deleteRegularization(
+    @Param('id') id: string,
+    @CurrentUser() user: RequestUser,
+  ) {
+    await this.attendanceService.deleteRegularization(id, user.id);
+    return { message: 'Regularization request revoked successfully' };
   }
 
   @Put('override')

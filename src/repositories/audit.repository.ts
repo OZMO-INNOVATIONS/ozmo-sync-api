@@ -12,6 +12,10 @@ export interface AuditLogEntity {
   ipAddress?: string;
   createdAt: Date;
   updatedAt: Date;
+  user?: {
+    firstName: string;
+    lastName: string;
+  };
 }
 
 @Injectable()
@@ -30,6 +34,10 @@ export class AuditRepository {
       ipAddress: entry.ipAddress ?? undefined,
       createdAt: entry.createdAt,
       updatedAt: entry.updatedAt,
+      user: entry.user ? {
+        firstName: entry.user.firstName,
+        lastName: entry.user.lastName,
+      } : undefined,
     };
   }
 
@@ -76,6 +84,14 @@ export class AuditRepository {
       orderBy: { createdAt: 'desc' },
       take: query.limit ?? 50,
       skip: query.offset ?? 0,
+      include: {
+        user: {
+          select: {
+            firstName: true,
+            lastName: true,
+          },
+        },
+      },
     });
 
     return {

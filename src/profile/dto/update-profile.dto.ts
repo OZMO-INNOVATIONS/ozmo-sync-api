@@ -1,22 +1,25 @@
-import { IsString, IsOptional, MinLength, MaxLength, IsEmail, IsEnum, Matches } from 'class-validator';
+import { IsString, IsOptional, MinLength, MaxLength, IsEmail, IsEnum, Matches, ValidateIf } from 'class-validator';
 import { Role } from '../../common/constants/roles.enum';
 
 export class UpdateProfileDto {
   @IsOptional()
+  @ValidateIf((o, v) => v !== undefined && v !== null && v !== '')
   @IsString()
   @MinLength(2)
   @MaxLength(50)
   firstName?: string;
 
   @IsOptional()
+  @ValidateIf((o, v) => v !== undefined && v !== null && v !== '')
   @IsString()
   @MinLength(2)
   @MaxLength(50)
   lastName?: string;
 
   @IsOptional()
+  @ValidateIf((o, v) => v !== undefined && v !== null && v !== '')
   @IsString()
-  @Matches(/^\d{10}$/, { message: 'Phone number must be exactly 10 digits' })
+  @Matches(/^\+?[\d\s\-()]{10,20}$/, { message: 'Phone number must be a valid format (10-20 digits/symbols)' })
   phone?: string;
 
   @IsOptional()
@@ -28,8 +31,9 @@ export class UpdateProfileDto {
   address?: string;
 
   @IsOptional()
+  @ValidateIf((o, v) => v !== undefined && v !== null && v !== '')
   @IsString()
-  @Matches(/^\d{10}$/, { message: 'Emergency contact must be exactly 10 digits' })
+  @Matches(/^\+?[\d\s\-()]{10,20}$/, { message: 'Emergency contact must be a valid format (10-20 digits/symbols)' })
   emergencyContact?: string;
 
   @IsOptional()

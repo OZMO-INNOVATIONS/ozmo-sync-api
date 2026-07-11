@@ -12,6 +12,8 @@
     "start:legacy": "node dist/main",
     "start:dev": "nest start --watch",
     "start:prod": "node dist/main",
+    "reset-super-pass": "node scratch/reset_password.js",
+    "query-all-users": "node scratch/query_all_users.js",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
     "test": "jest",
     "test:e2e": "jest --config ./test/jest-e2e.json"

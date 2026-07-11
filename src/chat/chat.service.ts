@@ -141,7 +141,7 @@ export class ChatService {
     // Retrieve:
     // 1. All PUBLIC channels in workspace
     // 2. PRIVATE channels in workspace where user is a member
-    return this.prisma.chatChannel.findMany({
+    const channels = await this.prisma.chatChannel.findMany({
       where: {
         workspaceId,
         OR: [
@@ -156,9 +156,17 @@ export class ChatService {
       },
       include: {
         members: {
-          select: {
-            userId: true,
-            role: true,
+          include: {
+            user: {
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                email: true,
+                profilePhoto: true,
+                status: true,
+              },
+            },
           },
         },
         _count: {
@@ -181,6 +189,26 @@ export class ChatService {
       },
       orderBy: { channelName: 'asc' },
     });
+
+    const channelsWithUnread = await Promise.all(
+      channels.map(async (c) => {
+        const unreadCount = await this.prisma.chatMessage.count({
+          where: {
+            channelId: c.id,
+            senderId: { not: userId },
+            reads: {
+              none: { userId },
+            },
+          },
+        });
+        return {
+          ...c,
+          unreadCount,
+        };
+      })
+    );
+
+    return channelsWithUnread;
   }
 
   async getChannelDetails(channelId: string, userId: string) {
@@ -434,7 +462,35 @@ export class ChatService {
   }
 
   async markAsRead(userId: string, messageId: string) {
-    const existingRead = await this.prisma.messageRead.findUnique({
+    const msg = await this.prisma.chatMessage.findUnique({
+      where: { id: messageId },
+    });
+    if (!msg) return null;
+
+    // Find all unread messages in this channel up to the creation time of this message
+    const unreadMessages = await this.prisma.chatMessage.findMany({
+      where: {
+        channelId: msg.channelId,
+        createdAt: { lte: msg.createdAt },
+        senderId: { not: userId },
+        reads: {
+          none: { userId },
+        },
+      },
+    });
+
+    if (unreadMessages.length > 0) {
+      await this.prisma.messageRead.createMany({
+        data: unreadMessages.map((m) => ({
+          messageId: m.id,
+          userId,
+        })),
+        skipDuplicates: true,
+      });
+    }
+
+    // Return the specific read record for the requested messageId
+    const readRecord = await this.prisma.messageRead.findUnique({
       where: {
         messageId_userId: {
           messageId,
@@ -443,32 +499,19 @@ export class ChatService {
       },
     });
 
-    if (existingRead) {
-      return existingRead;
-    }
-
-    return this.prisma.messageRead.create({
-      data: {
-        messageId,
-        userId,
-      },
-    });
+    return readRecord || { messageId, userId, readAt: new Date() };
   }
 
   async getUnreadCount(userId: string, workspaceId: string) {
-    // Find all channels user belongs to in workspace
+    // Find all channels the user is explicitly a member of in this workspace.
+    // We intentionally exclude public channels where the user has no membership record
+    // to avoid counting unread messages from channels the user has never joined/visited.
     const channels = await this.prisma.chatChannel.findMany({
       where: {
         workspaceId,
-        OR: [
-          { channelType: ChannelType.PUBLIC },
-          {
-            channelType: ChannelType.PRIVATE,
-            members: {
-              some: { userId },
-            },
-          },
-        ],
+        members: {
+          some: { userId },
+        },
       },
       select: { id: true },
     });

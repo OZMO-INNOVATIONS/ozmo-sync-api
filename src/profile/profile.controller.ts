@@ -16,6 +16,9 @@ export class ProfileController {
   @Get('profile')
   async getOwnProfile(@CurrentUser() user: RequestUser) {
     const data = await this.profileService.getProfile(user.id);
+    if (data) {
+      data.role = user.role;
+    }
     return { message: 'Profile fetched successfully', data };
   }
 

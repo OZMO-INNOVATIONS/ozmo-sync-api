@@ -57,12 +57,13 @@ export class AuditService {
   }
 
   private _format(entry: AuditLogEntity) {
+    const actorName = entry.user ? `${entry.user.firstName} ${entry.user.lastName}`.trim() : (entry.userId ?? 'System');
     return {
       id: entry.id,
       action: entry.action,
       entityType: entry.module,
       entityId: entry.id,
-      actor: entry.userId ?? 'System',
+      actor: actorName,
       actorId: entry.userId,
       ipAddress: entry.ipAddress,
       workspaceId: entry.workspaceId,

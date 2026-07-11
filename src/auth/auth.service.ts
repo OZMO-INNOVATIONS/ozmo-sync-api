@@ -264,7 +264,10 @@ export class AuthService {
       accessToken: tokens.accessToken,
       refreshToken: tokens.refreshToken,
       isFirstLogin: user.isFirstLogin,
-      user: this._sanitize(user),
+      user: {
+        ...this._sanitize(user),
+        role: targetRole,
+      },
       workspaces: memberships.map((m: any) => ({
         id: m.workspaceId,
         name: m.workspace.name,
@@ -315,7 +318,13 @@ export class AuthService {
     const targetRole = primaryMembership ? primaryMembership.role : (user.role === Role.SUPER_ADMIN ? Role.SUPER_ADMIN : Role.STAFF);
 
     const tokens = await this._issueTokens(user, targetWorkspaceId, targetRole);
-    return { ...tokens, user: this._sanitize(user) };
+    return {
+      ...tokens,
+      user: {
+        ...this._sanitize(user),
+        role: targetRole,
+      },
+    };
   }
 
   async switchWorkspace(userId: string, workspaceId: string) {

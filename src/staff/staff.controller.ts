@@ -64,14 +64,14 @@ export class StaffController {
     return { message: 'Staff member fetched', data };
   }
   @Put(':id')
-  @Roles(Role.ADMIN, Role.HR)
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.HR)
   async updateStaff(@Param('id') id: string, @Body() dto: UpdateStaffDto, @CurrentUser() actor: RequestUser) {
     const data = await this.staffService.update(id, dto, actor);
     return { message: 'Staff member updated', data };
   }
 
   @Delete(':id')
-  @Roles(Role.ADMIN)
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN)
   async deleteStaff(@Param('id') id: string, @CurrentUser() actor: RequestUser) {
     await this.staffService.delete(id, actor.id);
     return { message: 'Staff member deleted', data: {} };
